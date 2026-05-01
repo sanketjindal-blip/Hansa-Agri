@@ -24,6 +24,7 @@ export default function Profile() {
     ...(user?.role === 'admin' ? [
       { icon: 'construct-outline', label: t('admin_dashboard'), onPress: () => router.push('/admin') },
       { icon: 'cube-outline', label: 'Manage Products', onPress: () => router.push('/admin-products') },
+      { icon: 'settings-outline', label: 'Admin Console (Dealers / Warranty / Company)', onPress: () => router.push('/admin-console') },
     ] : []),
   ];
 

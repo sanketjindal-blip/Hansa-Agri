@@ -492,7 +492,132 @@ async def my_tickets(user=Depends(get_current_user)):
 # ---------------- Dealers ----------------
 @api.get("/dealers")
 async def list_dealers():
-    return DEALERS
+    items = await db.dealers.find({}, {"_id": 0}).to_list(500)
+    if not items:
+        return DEALERS
+    return items
+
+
+class DealerIn(BaseModel):
+    name: str
+    address: str
+    phone: str
+    whatsapp: str
+    state: str
+    type: str = "Authorised Dealer"
+
+
+@api.post("/admin/dealers")
+async def admin_create_dealer(body: DealerIn, user=Depends(require_admin)):
+    d = body.dict()
+    d["id"] = "d" + uuid.uuid4().hex[:8]
+    await db.dealers.insert_one(d)
+    d.pop("_id", None)
+    return d
+
+
+@api.patch("/admin/dealers/{dealer_id}")
+async def admin_update_dealer(dealer_id: str, body: DealerIn, user=Depends(require_admin)):
+    res = await db.dealers.update_one({"id": dealer_id}, {"$set": body.dict()})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Dealer not found")
+    d = await db.dealers.find_one({"id": dealer_id}, {"_id": 0})
+    return d
+
+
+@api.delete("/admin/dealers/{dealer_id}")
+async def admin_delete_dealer(dealer_id: str, user=Depends(require_admin)):
+    res = await db.dealers.delete_one({"id": dealer_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Dealer not found")
+    return {"deleted": True}
+
+
+@api.get("/settings/company")
+async def get_company():
+    s = await db.settings.find_one({"id": "company"}, {"_id": 0})
+    return s or {}
+
+
+class CompanyIn(BaseModel):
+    name: str
+    tagline: str
+    address: str
+    phone: str
+    phone_2: Optional[str] = ""
+    whatsapp: str
+    email: str
+    website: Optional[str] = ""
+
+
+@api.patch("/admin/settings/company")
+async def admin_update_company(body: CompanyIn, user=Depends(require_admin)):
+    data = body.dict()
+    data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.settings.update_one({"id": "company"}, {"$set": data}, upsert=True)
+    return await db.settings.find_one({"id": "company"}, {"_id": 0})
+
+
+class AssignWarrantyIn(BaseModel):
+    phone: str
+    product_id: str
+    quantity: int = 1
+    purchase_date: Optional[str] = None
+    customer_name: Optional[str] = None
+    address: Optional[str] = ""
+    city: Optional[str] = ""
+    state: Optional[str] = ""
+    pincode: Optional[str] = ""
+
+
+@api.post("/admin/assign-warranty")
+async def admin_assign_warranty(body: AssignWarrantyIn, user=Depends(require_admin)):
+    phone = _normalize_phone(body.phone)
+    if not phone:
+        raise HTTPException(status_code=400, detail="Invalid phone")
+    product = await db.products.find_one({"id": body.product_id}, {"_id": 0})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    target = await db.users.find_one({"phone": phone})
+    if not target:
+        target = {
+            "id": str(uuid.uuid4()),
+            "email": f"{phone.lstrip('+')}@phone.hansa",
+            "name": body.customer_name or f"Farmer {phone[-4:]}",
+            "phone": phone,
+            "role": "customer",
+            "password_hash": hash_password(uuid.uuid4().hex),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.users.insert_one(target)
+    try:
+        purchase_dt = datetime.fromisoformat(body.purchase_date) if body.purchase_date else datetime.now(timezone.utc)
+    except Exception:
+        purchase_dt = datetime.now(timezone.utc)
+    line_total = float(product["price"]) * body.quantity
+    order = {
+        "id": str(uuid.uuid4()),
+        "order_number": "RKAI" + purchase_dt.strftime("%y%m%d") + str(uuid.uuid4().int)[:5],
+        "user_id": target["id"],
+        "items": [{
+            "product_id": product["id"], "name": product["name"], "category": product["category"],
+            "image": product.get("image"), "price": product["price"], "quantity": body.quantity,
+            "warranty_months": product.get("warranty_months", 12), "line_total": line_total,
+        }],
+        "subtotal": line_total, "discount": 0.0, "promo_code": None, "total": line_total,
+        "status": "delivered", "payment_method": "offline",
+        "shipping": {"full_name": target["name"], "phone": phone, "address": body.address or "", "city": body.city or "", "state": body.state or "", "pincode": body.pincode or ""},
+        "created_at": purchase_dt.isoformat(), "purchase_date": purchase_dt.isoformat(),
+        "assigned_by_admin": user["id"],
+    }
+    await db.orders.insert_one(order)
+    try:
+        wm = int(product.get("warranty_months", 12))
+        send_sms(phone, f"HANSA: Warranty activated for your {product['name']}. Valid {wm} months from {purchase_dt.date().isoformat()}. View in HANSA app. Support: +91 9045 333 332")
+    except Exception:
+        pass
+    order.pop("_id", None)
+    return order
 
 
 SOCIAL = {
@@ -759,16 +884,43 @@ async def seed_offers():
         await db.offers.insert_many([dict(o) for o in SEED_OFFERS])
 
 
+async def seed_dealers():
+    count = await db.dealers.count_documents({})
+    if count == 0:
+        await db.dealers.insert_many([dict(d) for d in DEALERS])
+
+
+async def seed_settings():
+    existing = await db.settings.find_one({"id": "company"})
+    if not existing:
+        await db.settings.insert_one({
+            "id": "company",
+            "name": "Ramkishan Agri Innovate Pvt Ltd",
+            "tagline": "OUR CULTURE IS AGRICULTURE",
+            "address": "Plot No. 26, Harsh Commercial Park, Garh Road, Meerut-250002",
+            "phone": "+919045333332",
+            "phone_2": "+919479333332",
+            "whatsapp": "+919479333332",
+            "email": "support@agriequipments.com",
+            "website": "www.agriequipments.com",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+
 @app.on_event("startup")
 async def startup():
     await db.users.create_index("email", unique=True)
     await db.products.create_index("id", unique=True)
     await db.orders.create_index("user_id")
+    await db.otps.create_index("phone", unique=True)
+    await db.dealers.create_index("id", unique=True)
     await seed_admin()
     await seed_products()
     await seed_news()
     await seed_offers()
     await seed_demo_customer()
+    await seed_dealers()
+    await seed_settings()
     logger.info("RKAI app startup complete")
 
 
