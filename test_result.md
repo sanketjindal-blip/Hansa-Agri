@@ -157,14 +157,15 @@ frontend:
 
 metadata:
   created_by: "main_agent"
-  version: "1.1"
-  test_sequence: 2
+  version: "1.2"
+  test_sequence: 3
   run_ui: false
 
 test_plan:
   current_focus:
-    - "Refactor server.py into modular routers"
-    - "Public Instagram & Facebook scraping fallback"
+    - "Mobile-OTP-only Admin login (seed admin phones)"
+    - "Razorpay TEST keys live"
+    - "Lead referral & loyalty points system"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -172,14 +173,90 @@ test_plan:
 agent_communication:
   - agent: "main"
     message: |
-      Refactored backend to modular structure. All previous routes preserved at
-      identical paths. Smoke-tested every GET endpoint -> 200. Please run the
-      auth-protected suite: register/login/me, OTP send/verify, products
-      featured/categories/listing, orders checkout flow, warranties, support
-      tickets create+list, admin stats/promote-dealer/assign-warranty/CRUD on
-      dealers+products+news+offers+company, dealer me/assign-warranty, social
-      youtube/instagram/facebook/feed, payments config. Test creds in
-      /app/memory/test_credentials.md.
+      Three new features ready for backend regression:
+      1) ADMIN_PHONES (+919045666666, +917017509782) seeded as role=admin on
+         every startup. Legacy ramesh demo migrated to +919876543210/customer.
+         Verify both admin phones appear in /api/admin/users role=admin.
+      2) Razorpay TEST keys now live in backend/.env.
+         /api/payments/config -> razorpay_enabled:true.
+         /api/payments/razorpay/create-order should return order_id & key_id.
+      3) Loyalty/Leads end-to-end:
+         - Customer POST /api/leads {name, phone} mandatory -> status='new'.
+         - GET /api/leads/mine returns the lead.
+         - GET /api/me/points -> {balance, transactions, point_value_inr:1}.
+         - Admin PATCH /api/admin/leads/{id} {status:'purchased'} ->
+           lead.points_awarded=500, referrer balance +=500.
+         - Re-PATCH same lead with 'purchased' MUST NOT double-award.
+         - POST /api/admin/points/adjust {user_id, delta:-100, reason} ->
+           writes a points_transaction.
+         - POST /api/orders/checkout with redeem_points=300 reduces total by 300
+           and decrements user's balance by 300. Out-of-range redeem must cap.
+      Test creds in /app/memory/test_credentials.md.
+
+backend:
+  - task: "Mobile-OTP-only Admin login (seed admin phones)"
+    implemented: true
+    working: true
+    file: "backend/services/seed.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: false
+        agent: "testing"
+        comment: "Initial seed had +919045666666 missing because migrate_demo_customer_phone ran AFTER seed_admin_phones and downgraded that record."
+      - working: true
+        agent: "main"
+        comment: "Fixed: seed_admin_phones now matches by phone OR synthetic email and falls back to update on DuplicateKeyError. Verified post-restart: GET /api/admin/users contains both +919045666666 and +917017509782 with role=admin."
+
+  - task: "Razorpay TEST keys live"
+    implemented: true
+    working: "NA"
+    file: "backend/.env + backend/routes/payments.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+
+  - task: "Lead referral & loyalty points system"
+    implemented: true
+    working: "NA"
+    file: "backend/services/loyalty.py + backend/routes/loyalty.py + backend/routes/admin.py + backend/routes/orders.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+
+frontend:
+  - task: "Login screen - mobile OTP only (remove email/admin login UI)"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/(auth)/login.tsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+
+  - task: "Refer & Earn screen + Profile points card"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/refer.tsx + frontend/app/(tabs)/profile.tsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+
+  - task: "Admin Leads & Points management screen"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/admin-leads.tsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+
+  - task: "Checkout - Redeem points UI"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/checkout.tsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
   - agent: "testing"
     message: |
       Full backend regression complete — 54/54 test assertions passed with no 5xx.

@@ -23,6 +23,53 @@ async def seed_admin():
         })
 
 
+# Mobile-OTP-only admin numbers. These are seeded as admins on every startup
+# so admins can simply OTP-login without any email/password.
+ADMIN_PHONES = ["+919045666666", "+917017509782"]
+
+
+async def seed_admin_phones():
+    """Ensure each ADMIN_PHONES entry exists as a user with role=admin.
+
+    Idempotent: matches by phone OR by synthetic email so we don't lose admins
+    after migrations or reboots.
+    """
+    from pymongo.errors import DuplicateKeyError
+    for phone in ADMIN_PHONES:
+        synthetic_email = f"{phone.lstrip('+')}@phone.hansa"
+        existing = await db.users.find_one({
+            "$or": [{"phone": phone}, {"email": synthetic_email}],
+        })
+        if existing:
+            await db.users.update_one(
+                {"id": existing["id"]},
+                {"$set": {
+                    "phone": phone,
+                    "email": synthetic_email,
+                    "role": "admin",
+                    "points": existing.get("points", 0),
+                }},
+            )
+            continue
+        try:
+            await db.users.insert_one({
+                "id": str(uuid.uuid4()),
+                "email": synthetic_email,
+                "name": "HANSA Admin",
+                "phone": phone,
+                "role": "admin",
+                "points": 0,
+                "password_hash": hash_password(uuid.uuid4().hex),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+        except DuplicateKeyError:
+            # email collision (unique index) — find that record & promote it.
+            await db.users.update_one(
+                {"email": synthetic_email},
+                {"$set": {"phone": phone, "role": "admin"}},
+            )
+
+
 async def seed_demo_customer():
     email = "ramesh@farm.com"
     existing = await db.users.find_one({"email": email})
@@ -32,8 +79,9 @@ async def seed_demo_customer():
             "id": uid,
             "email": email,
             "name": "Ramesh Kumar",
-            "phone": "+919045666666",
+            "phone": "+919876543210",
             "role": "customer",
+            "points": 0,
             "password_hash": hash_password("farmer123"),
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
@@ -107,13 +155,33 @@ async def seed_settings():
         })
 
 
+async def migrate_demo_customer_phone():
+    """Move legacy Ramesh demo customer (was on +919045666666 - now an admin
+    phone) onto a non-admin number; downgrade his role to customer."""
+    user = await db.users.find_one({"email": "ramesh@farm.com"})
+    if not user:
+        return
+    update = {}
+    if user.get("phone") == "+919045666666":
+        update["phone"] = "+919876543210"
+    if user.get("role") == "admin":
+        update["role"] = "customer"
+    if update:
+        await db.users.update_one({"id": user["id"]}, {"$set": update})
+
+
 async def run_all():
     await db.users.create_index("email", unique=True)
     await db.products.create_index("id", unique=True)
     await db.orders.create_index("user_id")
     await db.otps.create_index("phone", unique=True)
     await db.dealers.create_index("id", unique=True)
+    await db.leads.create_index("id", unique=True)
+    await db.leads.create_index("referrer_user_id")
+    await db.points_transactions.create_index("user_id")
     await seed_admin()
+    await seed_admin_phones()
+    await migrate_demo_customer_phone()
     await seed_products()
     await seed_news()
     await seed_offers()

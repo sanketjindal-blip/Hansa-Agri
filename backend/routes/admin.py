@@ -8,9 +8,10 @@ from core.helpers import normalize_phone
 from core.security import require_admin, hash_password
 from models.schemas import (
     AdminProductIn, AdminNewsIn, AdminOfferIn, DealerIn, CompanyIn,
-    AssignWarrantyIn, DealerLoginIn,
+    AssignWarrantyIn, DealerLoginIn, LeadStatusIn, PointsAdjustIn,
 )
 from services.warranty import assign_warranty as _assign_warranty
+from services import loyalty
 from sms import send_sms
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -180,4 +181,59 @@ async def stats(user=Depends(require_admin)):
         "orders": await db.orders.count_documents({}),
         "support_tickets": await db.support_tickets.count_documents({}),
         "open_tickets": await db.support_tickets.count_documents({"status": "open"}),
+        "leads": await db.leads.count_documents({}),
+        "leads_new": await db.leads.count_documents({"status": "new"}),
+        "leads_purchased": await db.leads.count_documents({"status": "purchased"}),
     }
+
+
+# ---- Leads (admin) ----
+@router.get("/leads")
+async def list_leads(status: str | None = None, user=Depends(require_admin)):
+    return await loyalty.list_all_leads(status=status)
+
+
+@router.patch("/leads/{lead_id}")
+async def update_lead(lead_id: str, body: LeadStatusIn, user=Depends(require_admin)):
+    try:
+        return await loyalty.update_lead_status(lead_id, body.status, body.notes or "", user)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ---- Users & Points (admin) ----
+@router.get("/users")
+async def list_users(q: str | None = None, user=Depends(require_admin)):
+    query: dict = {}
+    if q:
+        query = {"$or": [
+            {"name": {"$regex": q, "$options": "i"}},
+            {"phone": {"$regex": q}},
+            {"email": {"$regex": q, "$options": "i"}},
+        ]}
+    items = await db.users.find(query, {"_id": 0, "password_hash": 0}).sort("created_at", -1).to_list(500)
+    return items
+
+
+@router.post("/points/adjust")
+async def adjust_points(body: PointsAdjustIn, user=Depends(require_admin)):
+    try:
+        new_balance = await loyalty.adjust_points(
+            body.user_id, body.delta,
+            f"[admin {user.get('name', '')}] {body.reason}",
+            ref={"admin_id": user["id"]},
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    target = await db.users.find_one({"id": body.user_id}, {"_id": 0, "phone": 1, "name": 1})
+    try:
+        if target and target.get("phone"):
+            verb = "credited" if body.delta > 0 else "debited"
+            send_sms(
+                target["phone"],
+                f"HANSA: {abs(body.delta)} reward points {verb}. "
+                f"Balance: {new_balance} pts (Rs.{new_balance}). Reason: {body.reason}",
+            )
+    except Exception:
+        pass
+    return {"user_id": body.user_id, "delta": body.delta, "balance": new_balance}

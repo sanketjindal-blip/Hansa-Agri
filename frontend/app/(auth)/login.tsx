@@ -10,14 +10,12 @@ import { theme } from '../../src/theme';
 
 export default function Login() {
   const router = useRouter();
-  const { sendOtp, verifyOtp, login } = useAuth();
+  const { sendOtp, verifyOtp } = useAuth();
   const { t } = useI18n();
-  const [step, setStep] = useState<'phone' | 'otp' | 'admin'>('phone');
+  const [step, setStep] = useState<'phone' | 'otp'>('phone');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [name, setName] = useState('');
-  const [adminEmail, setAdminEmail] = useState('');
-  const [adminPwd, setAdminPwd] = useState('');
   const [busy, setBusy] = useState(false);
 
   const onSend = async () => {
@@ -37,21 +35,15 @@ export default function Login() {
     finally { setBusy(false); }
   };
 
-  const onAdminLogin = async () => {
-    if (!adminEmail || !adminPwd) { Alert.alert('Missing info', 'Email and password required'); return; }
-    setBusy(true);
-    try { await login(adminEmail, adminPwd); router.replace('/(tabs)'); }
-    catch (e: any) { Alert.alert('Login failed', e.message); }
-    finally { setBusy(false); }
-  };
-
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <View style={styles.logoBadge}><HansaLogo size={84} /></View>
-          <Text style={styles.title}>{step === 'admin' ? 'Admin Login' : t('welcome_back')}</Text>
-          <Text style={styles.subtitle}>{step === 'phone' ? 'Login with your mobile number' : step === 'otp' ? `Enter OTP sent to ${phone}` : 'Sign in with admin email & password'}</Text>
+          <Text style={styles.title}>{t('welcome_back')}</Text>
+          <Text style={styles.subtitle}>
+            {step === 'phone' ? 'Login with your mobile number' : `Enter OTP sent to ${phone}`}
+          </Text>
 
           {step === 'phone' && (
             <>
@@ -67,6 +59,12 @@ export default function Login() {
               <TouchableOpacity testID="send-otp" style={styles.primaryBtn} onPress={onSend} disabled={busy}>
                 {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryTxt}>Send OTP</Text>}
               </TouchableOpacity>
+              <View style={styles.note}>
+                <Ionicons name="shield-checkmark" size={16} color={theme.colors.secondary} />
+                <Text style={styles.noteTxt}>
+                  Customers, dealers and admins all sign in with mobile + OTP. Your role unlocks the right tools automatically.
+                </Text>
+              </View>
             </>
           )}
 
@@ -84,28 +82,6 @@ export default function Login() {
               </TouchableOpacity>
             </>
           )}
-
-          {step === 'admin' && (
-            <>
-              <View style={styles.field}>
-                <Ionicons name="mail-outline" size={20} color={theme.colors.textSecondary} />
-                <TextInput testID="admin-email" placeholder={t('email')} placeholderTextColor={theme.colors.textMuted} autoCapitalize="none" keyboardType="email-address" value={adminEmail} onChangeText={setAdminEmail} style={styles.input} />
-              </View>
-              <View style={styles.field}>
-                <Ionicons name="lock-closed-outline" size={20} color={theme.colors.textSecondary} />
-                <TextInput testID="admin-password" placeholder={t('password')} placeholderTextColor={theme.colors.textMuted} secureTextEntry value={adminPwd} onChangeText={setAdminPwd} style={styles.input} />
-              </View>
-              <TouchableOpacity testID="admin-login" style={styles.primaryBtn} onPress={onAdminLogin} disabled={busy}>
-                {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryTxt}>{t('sign_in')}</Text>}
-              </TouchableOpacity>
-            </>
-          )}
-
-          <View style={styles.divider}><View style={styles.line} /><Text style={styles.or}>OR</Text><View style={styles.line} /></View>
-          <TouchableOpacity testID="switch-mode" onPress={() => setStep(step === 'admin' ? 'phone' : 'admin')} style={styles.switchBtn}>
-            <Ionicons name={step === 'admin' ? 'phone-portrait-outline' : 'shield-outline'} size={18} color={theme.colors.secondary} />
-            <Text style={styles.switchTxt}>{step === 'admin' ? 'Farmer login (OTP)' : 'Admin login (email)'}</Text>
-          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -125,9 +101,6 @@ const styles = StyleSheet.create({
   primaryTxt: { color: '#fff', fontWeight: '700', fontSize: 16 },
   secondary: { alignItems: 'center', paddingVertical: 12, marginTop: 6 },
   secondaryTxt: { color: theme.colors.secondary, fontWeight: '600' },
-  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 24 },
-  line: { flex: 1, height: 1, backgroundColor: theme.colors.border },
-  or: { marginHorizontal: 10, color: theme.colors.textMuted, fontSize: 12, fontWeight: '600' },
-  switchBtn: { flexDirection: 'row', gap: 8, justifyContent: 'center', alignItems: 'center', paddingVertical: 12, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: theme.colors.border },
-  switchTxt: { color: theme.colors.secondary, fontWeight: '700' },
+  note: { flexDirection: 'row', gap: 8, marginTop: 18, padding: 12, backgroundColor: '#FFF7E6', borderRadius: 12 },
+  noteTxt: { flex: 1, fontSize: 12, color: theme.colors.textSecondary, lineHeight: 17 },
 });

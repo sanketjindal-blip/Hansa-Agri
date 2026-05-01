@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -7,13 +7,22 @@ import { useAuth } from '../../src/AuthContext';
 import { useI18n } from '../../src/i18n';
 import { HansaLogo } from '../../src/components/HansaLogo';
 import { theme } from '../../src/theme';
+import { api } from '../../src/api';
 
 export default function Profile() {
   const router = useRouter();
   const { user, logout } = useAuth();
   const { t, lang, setLang } = useI18n();
+  const [points, setPoints] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get('/me/points').then(r => { if (!cancelled) setPoints(r.data.balance ?? 0); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [user?.id]);
 
   const menu = [
+    { icon: 'gift-outline', label: 'Refer & Earn — Submit a lead', onPress: () => router.push('/refer') },
     { icon: 'bag-outline', label: t('my_orders'), onPress: () => router.push('/(tabs)/orders') },
     { icon: 'shield-checkmark-outline', label: t('warranty'), onPress: () => router.push('/(tabs)/warranty') },
     { icon: 'pricetag-outline', label: t('offers_discounts'), onPress: () => router.push('/offers') },
@@ -24,6 +33,7 @@ export default function Profile() {
     ...(user?.role === 'admin' ? [
       { icon: 'construct-outline', label: t('admin_dashboard'), onPress: () => router.push('/admin') },
       { icon: 'cube-outline', label: 'Manage Products', onPress: () => router.push('/admin-products') },
+      { icon: 'people-outline', label: 'Leads & Points', onPress: () => router.push('/admin-leads') },
       { icon: 'settings-outline', label: 'Admin Console (Dealers / Warranty / Company)', onPress: () => router.push('/admin-console') },
       { icon: 'storefront-outline', label: 'Dealer Portal', onPress: () => router.push('/dealer-portal') },
     ] : []),
@@ -48,8 +58,19 @@ export default function Profile() {
             <Text style={styles.name}>{user?.name || 'Farmer'}</Text>
             <Text style={styles.email}>{user?.email}</Text>
             {user?.phone ? <Text style={styles.phone}>{user.phone}</Text> : null}
+            {user?.role === 'admin' ? <View style={styles.roleBadge}><Text style={styles.roleTxt}>ADMIN</Text></View> : user?.role === 'dealer' ? <View style={[styles.roleBadge, { backgroundColor: '#0A84FF' }]}><Text style={styles.roleTxt}>DEALER</Text></View> : null}
           </View>
         </View>
+
+        <TouchableOpacity testID="points-card" onPress={() => router.push('/refer')} style={styles.pointsCard}>
+          <View style={styles.pointsIcon}><Ionicons name="trophy" size={28} color="#fff" /></View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.pointsLbl}>Reward Points</Text>
+            <Text style={styles.pointsVal}>{points ?? '—'} <Text style={styles.pointsUnit}>pts</Text></Text>
+            <Text style={styles.pointsSub}>= ₹ {points ?? 0}  ·  Tap to refer & earn 500 pts</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#fff" />
+        </TouchableOpacity>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('language')}</Text>
@@ -105,6 +126,14 @@ const styles = StyleSheet.create({
   name: { fontSize: 18, fontWeight: '700', color: theme.colors.textPrimary },
   email: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 2 },
   phone: { fontSize: 12, color: theme.colors.textMuted, marginTop: 2 },
+  roleBadge: { alignSelf: 'flex-start', backgroundColor: theme.colors.primary, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, marginTop: 6 },
+  roleTxt: { color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  pointsCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: theme.colors.secondary, padding: 14, borderRadius: 16, marginTop: 12 },
+  pointsIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  pointsLbl: { color: '#fff', fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', opacity: 0.9 },
+  pointsVal: { color: '#fff', fontSize: 24, fontWeight: '800', marginTop: 2 },
+  pointsUnit: { fontSize: 13, opacity: 0.85, fontWeight: '600' },
+  pointsSub: { color: '#fff', fontSize: 11, opacity: 0.92, marginTop: 2 },
   section: { marginTop: 20 },
   sectionTitle: { fontSize: 12, fontWeight: '700', color: theme.colors.textMuted, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 10, paddingLeft: 4 },
   langRow: { flexDirection: 'row', gap: 10 },

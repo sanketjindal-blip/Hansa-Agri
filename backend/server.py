@@ -24,6 +24,7 @@ from routes import (
     admin as admin_routes,
     social as social_routes,
     payments as payments_routes,
+    loyalty as loyalty_routes,
 )
 from services import seed as seed_service
 
@@ -41,6 +42,7 @@ api.include_router(dealers_routes.router)
 api.include_router(admin_routes.router)
 api.include_router(social_routes.router)
 api.include_router(payments_routes.router)
+api.include_router(loyalty_routes.router)
 
 
 @api.get("/")

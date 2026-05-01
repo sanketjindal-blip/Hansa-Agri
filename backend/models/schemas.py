@@ -46,6 +46,25 @@ class CheckoutIn(BaseModel):
     pincode: str
     payment_method: str = "cod"
     promo_code: Optional[str] = None
+    redeem_points: int = 0
+
+
+class LeadIn(BaseModel):
+    name: str
+    phone: str
+    equipment_interest: Optional[str] = ""
+    notes: Optional[str] = ""
+
+
+class LeadStatusIn(BaseModel):
+    status: str  # new | contacted | purchased | lost
+    notes: Optional[str] = ""
+
+
+class PointsAdjustIn(BaseModel):
+    user_id: str
+    delta: int  # positive to add, negative to deduct
+    reason: str
 
 
 class SupportTicketIn(BaseModel):

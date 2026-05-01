@@ -26,12 +26,19 @@ export default function Checkout() {
   const [discount, setDiscount] = useState(0);
   const [rzpEnabled, setRzpEnabled] = useState(false);
   const [rzpHtml, setRzpHtml] = useState<string | null>(null);
+  const [pointsBalance, setPointsBalance] = useState(0);
+  const [redeemPoints, setRedeemPoints] = useState(0);
+  const [redeemOn, setRedeemOn] = useState(false);
 
   useEffect(() => {
     api.get('/payments/config').then(r => setRzpEnabled(!!r.data.razorpay_enabled)).catch(() => {});
+    api.get('/me/points').then(r => setPointsBalance(r.data.balance || 0)).catch(() => {});
   }, []);
 
-  const total = useMemo(() => Math.max(0, subtotal - discount), [subtotal, discount]);
+  const afterPromo = Math.max(0, subtotal - discount);
+  const maxRedeem = Math.min(pointsBalance, Math.floor(afterPromo));
+  const effectiveRedeem = redeemOn ? Math.min(redeemPoints || 0, maxRedeem) : 0;
+  const total = useMemo(() => Math.max(0, afterPromo - effectiveRedeem), [afterPromo, effectiveRedeem]);
 
   const applyPromo = async () => {
     try {
@@ -60,6 +67,7 @@ export default function Checkout() {
         full_name: fullName, phone, address, city, state, pincode,
         payment_method: paymentMethod,
         promo_code: promo || undefined,
+        redeem_points: effectiveRedeem,
       });
       const order = res.data;
 
@@ -128,6 +136,38 @@ new Razorpay(opts).open();
             <TouchableOpacity testID="apply-promo" onPress={applyPromo} style={styles.applyBtn}><Text style={styles.applyTxt}>Apply</Text></TouchableOpacity>
           </View>
 
+          <Text style={styles.sectionTitle}>Redeem Reward Points</Text>
+          {pointsBalance <= 0 ? (
+            <View style={styles.pointsHint}>
+              <Ionicons name="trophy-outline" size={18} color={theme.colors.textMuted} />
+              <Text style={styles.pointsHintTxt}>You have no points yet. Refer a friend from your Profile → Refer & Earn to start earning.</Text>
+            </View>
+          ) : (
+            <View style={styles.pointsBox}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Ionicons name="trophy" size={22} color={theme.colors.secondary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.pointsTitle}>You have {pointsBalance} pts (≈ ₹{pointsBalance})</Text>
+                  <Text style={styles.pointsSub}>1 point = ₹1. Max usable on this order: ₹{maxRedeem}</Text>
+                </View>
+                <TouchableOpacity testID="toggle-redeem" onPress={() => { const next = !redeemOn; setRedeemOn(next); setRedeemPoints(next ? maxRedeem : 0); }} style={[styles.toggle, redeemOn && styles.toggleOn]}>
+                  <View style={[styles.knob, redeemOn && styles.knobOn]} />
+                </TouchableOpacity>
+              </View>
+              {redeemOn && (
+                <TextInput
+                  testID="redeem-input"
+                  keyboardType="numeric"
+                  value={String(redeemPoints)}
+                  onChangeText={(v) => setRedeemPoints(Math.max(0, Math.min(parseInt(v.replace(/\D/g, ''), 10) || 0, maxRedeem)))}
+                  style={[styles.input, { marginTop: 10 }]}
+                  placeholder={`Use up to ${maxRedeem} pts`}
+                  placeholderTextColor={theme.colors.textMuted}
+                />
+              )}
+            </View>
+          )}
+
           <Text style={styles.sectionTitle}>Payment Method</Text>
           <TouchableOpacity testID="pm-cod" onPress={() => setPaymentMethod('cod')} style={[styles.pmRow, paymentMethod === 'cod' && styles.pmActive]}>
             <Ionicons name={paymentMethod === 'cod' ? 'radio-button-on' : 'radio-button-off'} size={22} color={theme.colors.primary} />
@@ -145,6 +185,9 @@ new Razorpay(opts).open();
           <View style={styles.summary}>
             <View style={styles.sRow}><Text style={styles.sLbl}>Subtotal ({items.length} items)</Text><Text style={styles.sVal}>{formatINR(subtotal)}</Text></View>
             <View style={styles.sRow}><Text style={styles.sLbl}>Discount</Text><Text style={[styles.sVal, { color: theme.colors.secondary }]}>-{formatINR(discount)}</Text></View>
+            {effectiveRedeem > 0 && (
+              <View style={styles.sRow}><Text style={styles.sLbl}>Points Redeemed ({effectiveRedeem} pts)</Text><Text style={[styles.sVal, { color: theme.colors.secondary }]}>-{formatINR(effectiveRedeem)}</Text></View>
+            )}
             <View style={styles.sRow}><Text style={styles.sLbl}>Shipping</Text><Text style={styles.sVal}>Free</Text></View>
             <View style={[styles.sRow, { borderTopWidth: 1, borderTopColor: theme.colors.border, paddingTop: 10, marginTop: 6 }]}>
               <Text style={styles.grandLbl}>Total</Text><Text style={styles.grandVal}>{formatINR(total)}</Text>
@@ -192,4 +235,13 @@ const styles = StyleSheet.create({
   bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: theme.colors.border },
   placeBtn: { backgroundColor: theme.colors.primary, borderRadius: 999, paddingVertical: 16, alignItems: 'center' },
   placeTxt: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  pointsBox: { backgroundColor: '#FFFBEA', borderWidth: 1, borderColor: '#FFE08A', borderRadius: 12, padding: 12 },
+  pointsTitle: { fontWeight: '700', color: theme.colors.textPrimary, fontSize: 13 },
+  pointsSub: { fontSize: 11, color: theme.colors.textSecondary, marginTop: 2 },
+  pointsHint: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', backgroundColor: '#FAFAFA', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: theme.colors.border },
+  pointsHintTxt: { flex: 1, fontSize: 12, color: theme.colors.textSecondary, lineHeight: 17 },
+  toggle: { width: 44, height: 26, borderRadius: 999, backgroundColor: '#D5D5D5', padding: 3, justifyContent: 'center' },
+  toggleOn: { backgroundColor: theme.colors.secondary },
+  knob: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff' },
+  knobOn: { transform: [{ translateX: 18 }] },
 });

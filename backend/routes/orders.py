@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from core.db import db
 from core.security import get_current_user
 from models.schemas import CheckoutIn
+from services import loyalty
 from sms import send_sms
 
 router = APIRouter(tags=["orders"])
@@ -42,7 +43,15 @@ async def checkout(body: CheckoutIn, user=Depends(get_current_user)):
             discount = round(subtotal * (offer["discount_percent"] / 100.0), 2)
             promo_applied = offer["code"]
 
-    total = max(0.0, subtotal - discount)
+    after_promo = max(0.0, subtotal - discount)
+
+    # Apply points redemption (1 point = INR 1).
+    redeem = max(0, int(body.redeem_points or 0))
+    points_balance = await loyalty.get_user_points(user["id"])
+    redeem = min(redeem, points_balance, int(after_promo))
+    points_discount = float(redeem)
+
+    total = max(0.0, after_promo - points_discount)
     now = datetime.now(timezone.utc)
     order = {
         "id": str(uuid.uuid4()),
@@ -52,6 +61,8 @@ async def checkout(body: CheckoutIn, user=Depends(get_current_user)):
         "subtotal": round(subtotal, 2),
         "discount": discount,
         "promo_code": promo_applied,
+        "points_redeemed": redeem,
+        "points_discount": round(points_discount, 2),
         "total": round(total, 2),
         "status": "confirmed",
         "payment_method": body.payment_method,
@@ -64,11 +75,23 @@ async def checkout(body: CheckoutIn, user=Depends(get_current_user)):
     }
     await db.orders.insert_one(order)
     order.pop("_id", None)
+
+    # Deduct points after successful insert
+    if redeem > 0:
+        try:
+            await loyalty.adjust_points(
+                user["id"], -redeem,
+                f"Redeemed on order {order['order_number']}",
+                ref={"order_id": order["id"]},
+            )
+        except Exception:
+            pass
+
     try:
         msg = (
             f"HANSA: Order #{order['order_number']} confirmed. "
             f"Total Rs.{int(order['total'])}. Items: {len(order_items)}. "
-            f"Track in app. Support: +91 9045 333 332"
+            f"Track in app. Support: +91 9479 333 332"
         )
         send_sms(body.phone, msg)
     except Exception:
