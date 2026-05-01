@@ -8,7 +8,8 @@ from core.helpers import normalize_phone
 from core.security import require_admin, hash_password
 from models.schemas import (
     AdminProductIn, AdminNewsIn, AdminOfferIn, DealerIn, CompanyIn,
-    AssignWarrantyIn, DealerLoginIn, LeadStatusIn, PointsAdjustIn, CategoryIn,
+    DealerLoginIn, LeadStatusIn, PointsAdjustIn, CategoryIn,
+    CategoryReorderIn, MultiAssignWarrantyIn,
 )
 from services.warranty import assign_warranty as _assign_warranty
 from services import loyalty
@@ -144,7 +145,7 @@ async def promote_dealer(body: DealerLoginIn, user=Depends(require_admin)):
 
 
 @router.post("/assign-warranty")
-async def admin_assign_warranty(body: AssignWarrantyIn, user=Depends(require_admin)):
+async def admin_assign_warranty(body: MultiAssignWarrantyIn, user=Depends(require_admin)):
     return await _assign_warranty(body, actor=user, role_label="admin")
 
 
@@ -276,6 +277,19 @@ async def update_category(cat_id: str, body: CategoryIn, user=Depends(require_ad
         )
     await db.categories.update_one({"id": cat_id}, {"$set": update})
     return await db.categories.find_one({"id": cat_id}, {"_id": 0})
+
+
+@router.post("/categories/reorder")
+async def reorder_categories(body: CategoryReorderIn, user=Depends(require_admin)):
+    """Persist category order. Sort_order is set to (index+1)*10."""
+    if not body.ids:
+        raise HTTPException(status_code=400, detail="ids is required")
+    for idx, cid in enumerate(body.ids):
+        await db.categories.update_one(
+            {"id": cid}, {"$set": {"sort_order": (idx + 1) * 10}}
+        )
+    items = await db.categories.find({}, {"_id": 0}).sort("sort_order", 1).to_list(200)
+    return items
 
 
 @router.delete("/categories/{cat_id}")

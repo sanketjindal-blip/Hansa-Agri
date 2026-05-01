@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from core.db import db
 from core.security import require_dealer
 from dealers_data import DEALERS
-from models.schemas import AssignWarrantyIn
+from models.schemas import MultiAssignWarrantyIn
 from services.warranty import assign_warranty as _assign_warranty
 
 router = APIRouter(tags=["dealers"])
@@ -34,7 +34,7 @@ async def dealer_orders(user=Depends(require_dealer)):
 
 
 @router.post("/dealer/assign-warranty")
-async def dealer_assign_warranty(body: AssignWarrantyIn, user=Depends(require_dealer)):
+async def dealer_assign_warranty(body: MultiAssignWarrantyIn, user=Depends(require_dealer)):
     return await _assign_warranty(body, actor=user, role_label="dealer")
 
 

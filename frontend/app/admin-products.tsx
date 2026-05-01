@@ -141,9 +141,10 @@ export default function AdminProducts() {
             <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 100 }} keyboardShouldPersistTaps="handled">
               <TextInput testID="ap-name" placeholder="Product name" placeholderTextColor={theme.colors.textMuted} value={form.name} onChangeText={v => setForm({ ...form, name: v })} style={styles.input} />
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4, marginBottom: 10 }}>
-                {CATEGORIES.map(c => (
-                  <TouchableOpacity key={c} onPress={() => setForm({ ...form, category: c })} style={[styles.chip, form.category === c && styles.chipActive]}>
-                    <Text style={[styles.chipTxt, form.category === c && styles.chipTxtActive]}>{c}</Text>
+                {categories.map((c: any) => (
+                  <TouchableOpacity key={c.key} onPress={() => setForm({ ...form, category: c.key })} style={[styles.chip, form.category === c.key && styles.chipActive]}>
+                    <Ionicons name={(c.icon || 'cube') as any} size={14} color={form.category === c.key ? '#fff' : theme.colors.textSecondary} style={{ marginRight: 4 }} />
+                    <Text style={[styles.chipTxt, form.category === c.key && styles.chipTxtActive]}>{c.label || c.key}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -187,7 +188,7 @@ const styles = StyleSheet.create({
   pPrice: { fontSize: 13, fontWeight: '800', color: theme.colors.primary, marginTop: 2 },
   iconBtn: { width: 34, height: 34, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   input: { backgroundColor: '#fff', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: theme.colors.border, color: theme.colors.textPrimary, fontSize: 14, marginBottom: 10 },
-  chip: { paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#fff', borderRadius: 999, borderWidth: 1, borderColor: theme.colors.border },
+  chip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#fff', borderRadius: 999, borderWidth: 1, borderColor: theme.colors.border },
   chipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
   chipTxt: { color: theme.colors.textSecondary, fontWeight: '600', fontSize: 12 },
   chipTxtActive: { color: '#fff' },

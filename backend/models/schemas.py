@@ -158,3 +158,27 @@ class CategoryIn(BaseModel):
     icon: str = "cube"
     sort_order: int = 100
     active: bool = True
+
+
+class CategoryReorderIn(BaseModel):
+    ids: List[str]
+
+
+class WarrantyItemIn(BaseModel):
+    product_id: str
+    quantity: int = 1
+
+
+class MultiAssignWarrantyIn(BaseModel):
+    phone: str
+    items: List[WarrantyItemIn] = []
+    # Single-product fallback (kept for backwards compatibility)
+    product_id: Optional[str] = None
+    quantity: int = 1
+    purchase_date: Optional[str] = None
+    customer_name: Optional[str] = None
+    address: Optional[str] = ""
+    city: Optional[str] = ""
+    state: Optional[str] = ""
+    pincode: Optional[str] = ""
+    bill_image_base64: Optional[str] = None

@@ -194,6 +194,46 @@ agent_communication:
       Test creds in /app/memory/test_credentials.md.
 
 backend:
+  - task: "Categories drag-to-reorder + product picker uses category list + multi-product warranty"
+    implemented: true
+    working: true
+    file: "backend/routes/admin.py + backend/services/warranty.py + backend/models/schemas.py + backend/routes/dealers.py + frontend/app/admin-categories.tsx + frontend/app/admin-products.tsx + frontend/app/dealer-portal.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          Targeted regression — 27/27 assertions passed via /app/backend_test_review.py against the public preview URL. Zero 5xx.
+          Reorder: GET /api/admin/categories returned 10 items with full {id,key,label,icon,sort_order,active} shape.
+          POST /api/admin/categories/reorder with reversed ids returned 200, response sorted by sort_order ascending matched the reversed input, and every sort_order = (index+1)*10. Public GET /api/categories reflected the new ordering (active subset). Negatives covered: empty ids list → 400 ("ids is required"); empty body → 422 (FastAPI validation); no auth → 401; customer token → 403. Order was restored to original after testing.
+          Multi-warranty (admin): POST /api/admin/assign-warranty with items=[{p1,qty=2},{p2,qty=1}] → 200, items.length==2, status="delivered", subtotal & total == sum(price*qty)=169500. Legacy single body {phone,product_id,quantity:1} → 200 with items.length==1 (backwards compat preserved). Negative: body without items[] and without product_id → 400 "At least one product is required". Negative: items containing invalid product_id → 404 "Product non-existent-id-xyz not found".
+          Verified at DB level (motor) that the auto-created customer +919871234500 has BOTH orders: one with 2 items (total 169500) and one with 1 item (total 48500), both status=delivered. /api/orders endpoint requires the user's own JWT and SMS-OTP login, which we cannot perform headlessly, so verification was done via admin/users + direct DB read instead.
+          Dealer endpoint /api/dealer/assign-warranty shares the same warranty service; not directly invoked because OTP login as a dealer requires reading SMS, but the underlying assign_warranty service is fully exercised through the admin path (same code path, only role_label differs).
+      - working: "NA"
+        agent: "main"
+        comment: |
+          THREE upgrades:
+          1) `POST /api/admin/categories/reorder {ids:[...]}` persists order; FE
+             uses react-native-draggable-flatlist for long-press drag in
+             /admin-categories. Ids passed in display order; backend writes
+             sort_order=(index+1)*10.
+          2) Admin Products form: dropdown chips now read from
+             /api/admin/categories (instead of hardcoded list) and show the
+             configured icons.
+          3) Warranty assignment now accepts `items: [{product_id, quantity}]`
+             via new MultiAssignWarrantyIn schema. Both /api/admin/assign-warranty
+             and /api/dealer/assign-warranty support it. Legacy single
+             product_id+quantity payload still works (backwards compat).
+             services/warranty.py creates ONE order document per call with all
+             selected products and one shared bill_image. SMS now lists every
+             activated product in a single message.
+             Frontend dealer-portal.tsx replaced single chip selector with a
+             searchable multi-select list (checkbox + per-item +/- qty controls)
+             plus running total. Admin role can also use this flow.
+          Smoke-tested all three flows; 200 OK on every call.
+
   - task: "Configurable categories with admin CRUD + icons"
     implemented: true
     working: true
@@ -318,3 +358,35 @@ frontend:
       re-PATCH key rename → 200), DELETE (200 {deleted:true}, re-DELETE → 404),
       negatives (empty key → 400 "key is required", PATCH/DELETE unknown id → 404).
       No backend errors. Feature cleared.
+  - agent: "testing"
+    message: |
+      Targeted regression for "Categories drag-to-reorder" + "Multi-product warranty"
+      via /app/backend_test_review.py — 27/27 assertions passed, zero 5xx, zero failures.
+
+      1) POST /api/admin/categories/reorder
+         - GET /api/admin/categories baseline returned 10 cats with required shape.
+         - Reversed-id POST → 200, response sorted asc by sort_order matched the reversed
+           ids exactly, sort_order = (idx+1)*10 verified for all 10.
+         - Public GET /api/categories reflected the new ordering.
+         - Negatives: empty ids → 400 ("ids is required"), missing body → 422,
+           no auth → 401, customer token → 403. Order restored at the end.
+
+      2) Multi-product warranty (admin path):
+         - items=[{p1,qty=2},{p2,qty=1}] → 200, items.length==2, status="delivered",
+           subtotal & total = 169500 (sum price*qty).
+         - Legacy single-product body (product_id+quantity) → 200 with items.length==1
+           (backwards compat preserved).
+         - No items[] and no product_id → 400 "At least one product is required".
+         - Invalid product_id in items → 404 "Product non-existent-id-xyz not found".
+         - DB-level verification confirmed the auto-created customer +919871234500
+           has BOTH orders (2 items / 169500 and 1 item / 48500), both delivered.
+
+      Notes / scope:
+      - Direct GET /api/orders for the auto-created phone customer requires SMS-OTP
+        login (no SMS readback in this env) so verification was via admin/users +
+        direct DB read instead.
+      - /api/dealer/assign-warranty was not invoked directly (dealer OTP login not
+        feasible headlessly), but it shares the exact same warranty service code as
+        admin path (only role_label differs), which is fully exercised here.
+
+      No further backend retest required for these two features.
