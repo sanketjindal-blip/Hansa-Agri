@@ -3,10 +3,10 @@ import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Activi
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
-import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api, formatApiError } from '../src/api';
 import { theme } from '../src/theme';
+import { safeBack } from '../src/nav';
 
 type Cat = { id: string; key: string; label: string; icon: string; sort_order: number; active: boolean };
 
@@ -106,7 +106,7 @@ export default function AdminCategories() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaView style={styles.safe} edges={['top']}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} /></TouchableOpacity>
+          <TouchableOpacity onPress={() => safeBack()}><Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} /></TouchableOpacity>
           <Text style={styles.title}>Manage Categories</Text>
           <TouchableOpacity testID="add-category" onPress={openAdd}><Ionicons name="add-circle" size={28} color={theme.colors.primary} /></TouchableOpacity>
         </View>
@@ -141,14 +141,26 @@ export default function AdminCategories() {
                 <TextInput placeholder="e.g. Power Tiller" placeholderTextColor={theme.colors.textMuted} value={label} onChangeText={setLabel} style={styles.input} />
 
                 <Text style={styles.field}>Icon</Text>
-                <TouchableOpacity testID="open-icon-picker" onPress={() => setPickIcon(true)} style={styles.iconPickBtn}>
+                <View style={styles.iconCurrent}>
                   <View style={styles.iconBox}><Ionicons name={icon as any} size={28} color={theme.colors.primary} /></View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.rowLabel}>{icon}</Text>
-                    <Text style={styles.rowSub}>Tap to choose another</Text>
+                    <Text style={styles.rowSub}>{pickIcon ? 'Tap an icon below' : 'Tap to choose another'}</Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
-                </TouchableOpacity>
+                  <TouchableOpacity testID="open-icon-picker" onPress={() => setPickIcon(v => !v)} style={{ padding: 6 }}>
+                    <Ionicons name={pickIcon ? 'chevron-up' : 'chevron-down'} size={22} color={theme.colors.textMuted} />
+                  </TouchableOpacity>
+                </View>
+                {pickIcon && (
+                  <View style={styles.iconGrid}>
+                    {ICON_OPTIONS.map((name) => (
+                      <TouchableOpacity key={name} testID={`icon-${name}`} onPress={() => { setIcon(name); setPickIcon(false); }} style={[styles.iconCell, icon === name && styles.iconCellActive]}>
+                        <Ionicons name={name as any} size={26} color={icon === name ? '#fff' : theme.colors.primary} />
+                        <Text numberOfLines={1} style={[styles.iconLbl, icon === name && { color: '#fff' }]}>{name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
 
                 <TouchableOpacity onPress={() => setActive(a => !a)} style={styles.toggleRow}>
                   <Ionicons name={active ? 'checkbox' : 'square-outline'} size={22} color={active ? theme.colors.secondary : theme.colors.textMuted} />
@@ -166,24 +178,6 @@ export default function AdminCategories() {
           </KeyboardAvoidingView>
         </Modal>
 
-        <Modal visible={pickIcon} animationType="slide" transparent onRequestClose={() => setPickIcon(false)}>
-          <View style={styles.modalWrap}>
-            <View style={[styles.modal, { maxHeight: '80%' }]}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <Text style={styles.modalTitle}>Pick an icon</Text>
-                <TouchableOpacity onPress={() => setPickIcon(false)}><Ionicons name="close" size={26} color={theme.colors.textPrimary} /></TouchableOpacity>
-              </View>
-              <ScrollView contentContainerStyle={styles.iconGrid}>
-                {ICON_OPTIONS.map((name) => (
-                  <TouchableOpacity key={name} testID={`icon-${name}`} onPress={() => { setIcon(name); setPickIcon(false); }} style={[styles.iconCell, icon === name && styles.iconCellActive]}>
-                    <Ionicons name={name as any} size={26} color={icon === name ? '#fff' : theme.colors.primary} />
-                    <Text numberOfLines={1} style={[styles.iconLbl, icon === name && { color: '#fff' }]}>{name}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
       </SafeAreaView>
     </GestureHandlerRootView>
   );
@@ -205,12 +199,13 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 18, fontWeight: '800', color: theme.colors.textPrimary },
   field: { fontSize: 11, color: theme.colors.textSecondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginTop: 14, marginBottom: 6 },
   input: { backgroundColor: '#F8F8F8', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: theme.colors.border, color: theme.colors.textPrimary, fontSize: 14 },
+  iconCurrent: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#F8F8F8', padding: 10, borderRadius: 12, borderWidth: 1, borderColor: theme.colors.border },
   iconPickBtn: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#F8F8F8', padding: 10, borderRadius: 12, borderWidth: 1, borderColor: theme.colors.border },
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16 },
   toggleTxt: { color: theme.colors.textPrimary, fontSize: 14 },
   btn: { paddingVertical: 14, borderRadius: 999, alignItems: 'center' },
   btnTxt: { color: '#fff', fontWeight: '700' },
-  iconGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 24 },
+  iconGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8, paddingBottom: 12 },
   iconCell: { width: '23%', aspectRatio: 1, borderRadius: 12, backgroundColor: '#FFFBEA', alignItems: 'center', justifyContent: 'center', gap: 4 },
   iconCellActive: { backgroundColor: theme.colors.primary },
   iconLbl: { fontSize: 9, color: theme.colors.textSecondary, fontWeight: '600' },

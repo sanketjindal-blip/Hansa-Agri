@@ -24,3 +24,10 @@ export function formatApiError(err: any): string {
   if (Array.isArray(detail)) return detail.map((d: any) => d?.msg || JSON.stringify(d)).join(' ');
   return typeof detail?.msg === 'string' ? detail.msg : JSON.stringify(detail);
 }
+
+/** Convert a server-relative URL like "/api/uploads/foo.jpg" to absolute. */
+export function absoluteUrl(rel?: string | null): string | undefined {
+  if (!rel) return undefined;
+  if (rel.startsWith('http')) return rel;
+  return `${BASE}${rel}`;
+}

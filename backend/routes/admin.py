@@ -378,3 +378,32 @@ async def demote_manager(user_id: str, user=Depends(require_admin)):
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Manager not found")
     return {"demoted": True}
+
+
+# ---- Image upload (for product creation) ----
+from fastapi import UploadFile, File
+from pathlib import Path
+
+UPLOAD_DIR = Path("/app/backend/uploads")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".heic"}
+
+
+@router.post("/upload-image")
+async def upload_image(image: UploadFile = File(...), user=Depends(require_admin)):
+    ext = Path(image.filename or "").suffix.lower() or ".jpg"
+    if ext not in ALLOWED_EXT:
+        raise HTTPException(status_code=400, detail=f"Image type {ext} not allowed")
+    name = f"{uuid.uuid4().hex}{ext}"
+    path = UPLOAD_DIR / name
+    size = 0
+    with path.open("wb") as out:
+        while chunk := await image.read(64 * 1024):
+            size += len(chunk)
+            if size > MAX_IMAGE_BYTES:
+                out.close()
+                path.unlink(missing_ok=True)
+                raise HTTPException(status_code=413, detail="Image too large (>5 MB)")
+            out.write(chunk)
+    return {"filename": name, "url": f"/api/uploads/{name}", "size": size}

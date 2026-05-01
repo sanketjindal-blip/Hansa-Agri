@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, FlatList, Image, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { api, formatApiError } from '../src/api';
+import * as ImagePicker from 'expo-image-picker';
+import { api, formatApiError, absoluteUrl } from '../src/api';
 import { useAuth } from '../src/AuthContext';
 import { theme, formatINR } from '../src/theme';
+import { safeBack } from '../src/nav';
 
 type FormState = {
   name: string; category: string; price: string; warranty_months: string;
@@ -15,14 +16,11 @@ type FormState = {
 
 const EMPTY: FormState = {
   name: '', category: 'Tiller', price: '0', warranty_months: '12',
-  description: '', image: 'https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=800&q=80',
+  description: '', image: '',
   features: '', recommended_hp: '35 HP & above', specifications: '', featured: false,
 };
 
-const CATEGORIES = ['Tiller', 'Harrow', 'Plough', 'Cultivator', 'Ridger', 'Subsoiler', 'Leveller', 'Weeder', 'Bund Maker', 'Trench Maker'];
-
 export default function AdminProducts() {
-  const router = useRouter();
   const { user } = useAuth();
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
@@ -31,12 +29,13 @@ export default function AdminProducts() {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY);
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (user?.role !== 'admin') {
-      Alert.alert('Access denied', 'Admin only', [{ text: 'OK', onPress: () => router.back() }]);
+      Alert.alert('Access denied', 'Admin only', [{ text: 'OK', onPress: () => safeBack() }]);
     }
-  }, [user, router]);
+  }, [user]);
 
   const load = useCallback(async () => {
     try {
@@ -59,8 +58,38 @@ export default function AdminProducts() {
     setModalOpen(true);
   };
 
+  const pickImage = async (source: 'gallery' | 'camera') => {
+    const requestPerm = source === 'camera'
+      ? ImagePicker.requestCameraPermissionsAsync
+      : ImagePicker.requestMediaLibraryPermissionsAsync;
+    const perm = await requestPerm();
+    if (!perm.granted) { Alert.alert('Permission required'); return; }
+    const opts: ImagePicker.ImagePickerOptions = {
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.7,
+      allowsEditing: true,
+      aspect: [4, 3],
+    };
+    const res = source === 'camera'
+      ? await ImagePicker.launchCameraAsync(opts)
+      : await ImagePicker.launchImageLibraryAsync(opts);
+    if (res.canceled || !res.assets[0]) return;
+    const a = res.assets[0];
+    const ext = (a.fileName?.split('.').pop() || 'jpg').toLowerCase();
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      // @ts-expect-error - RN style FormData
+      fd.append('image', { uri: a.uri, name: a.fileName || `product-${Date.now()}.${ext}`, type: a.mimeType || `image/${ext === 'jpg' ? 'jpeg' : ext}` });
+      const r = await api.post('/admin/upload-image', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setForm(prev => ({ ...prev, image: r.data.url }));
+    } catch (e: any) { Alert.alert('Upload failed', formatApiError(e)); }
+    finally { setUploading(false); }
+  };
+
   const submit = async () => {
     if (!form.name || !form.price) return Alert.alert('Missing', 'Name and price required');
+    if (!form.image) return Alert.alert('Missing', 'Please upload a product image');
     setBusy(true);
     try {
       const specs: Record<string, string> = {};
@@ -102,7 +131,7 @@ export default function AdminProducts() {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <TouchableOpacity testID="ap-back" onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} /></TouchableOpacity>
+        <TouchableOpacity testID="ap-back" onPress={() => safeBack()}><Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} /></TouchableOpacity>
         <Text style={styles.title}>Manage Products</Text>
         <TouchableOpacity testID="ap-new" onPress={openNew}><Ionicons name="add-circle" size={28} color={theme.colors.primary} /></TouchableOpacity>
       </View>
@@ -119,7 +148,7 @@ export default function AdminProducts() {
           contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: 40 }}
           renderItem={({ item }) => (
             <View style={styles.pCard}>
-              <Image source={{ uri: item.image }} style={styles.pImg} />
+              <Image source={{ uri: absoluteUrl(item.image) || item.image }} style={styles.pImg} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.pCat}>{item.category}{item.featured ? ' · ★ Featured' : ''}</Text>
                 <Text style={styles.pName} numberOfLines={2}>{item.name}</Text>
@@ -158,8 +187,24 @@ export default function AdminProducts() {
               </View>
               <TextInput testID="ap-hp" placeholder="Recommended HP (e.g., 35 HP & above)" placeholderTextColor={theme.colors.textMuted} value={form.recommended_hp} onChangeText={v => setForm({ ...form, recommended_hp: v })} style={styles.input} />
               <TextInput testID="ap-desc" placeholder="Description" placeholderTextColor={theme.colors.textMuted} value={form.description} onChangeText={v => setForm({ ...form, description: v })} multiline style={[styles.input, { minHeight: 80, textAlignVertical: 'top' }]} />
-              <TextInput testID="ap-image" placeholder="Image URL" placeholderTextColor={theme.colors.textMuted} value={form.image} onChangeText={v => setForm({ ...form, image: v })} style={styles.input} />
-              {!!form.image && <Image source={{ uri: form.image }} style={styles.preview} />}
+              <Text style={styles.hintLbl}>Product Image *</Text>
+              {form.image ? (
+                <View style={styles.imgWrap}>
+                  <Image source={{ uri: absoluteUrl(form.image) || form.image }} style={styles.preview} />
+                  <TouchableOpacity onPress={() => setForm({ ...form, image: '' })} style={styles.removeImg}>
+                    <Ionicons name="close-circle" size={28} color={theme.colors.danger} />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
+                  <TouchableOpacity testID="ap-img-cam" onPress={() => pickImage('camera')} disabled={uploading} style={[styles.imgBtn, { backgroundColor: theme.colors.primary }]}>
+                    {uploading ? <ActivityIndicator color="#fff" /> : <><Ionicons name="camera-outline" size={18} color="#fff" /><Text style={styles.imgBtnTxt}>Take Photo</Text></>}
+                  </TouchableOpacity>
+                  <TouchableOpacity testID="ap-img-gal" onPress={() => pickImage('gallery')} disabled={uploading} style={[styles.imgBtn, { backgroundColor: theme.colors.secondary }]}>
+                    {uploading ? <ActivityIndicator color="#fff" /> : <><Ionicons name="image-outline" size={18} color="#fff" /><Text style={styles.imgBtnTxt}>Upload</Text></>}
+                  </TouchableOpacity>
+                </View>
+              )}
               <Text style={styles.hintLbl}>Key Features (one per line)</Text>
               <TextInput testID="ap-features" placeholder="Loosens hard soil&#10;Breaks clods" placeholderTextColor={theme.colors.textMuted} value={form.features} onChangeText={v => setForm({ ...form, features: v })} multiline style={[styles.input, { minHeight: 100, textAlignVertical: 'top' }]} />
               <Text style={styles.hintLbl}>Specifications (Key: Value per line)</Text>
@@ -196,7 +241,11 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
   chipTxt: { color: theme.colors.textSecondary, fontWeight: '600', fontSize: 12 },
   chipTxtActive: { color: '#fff' },
-  preview: { width: '100%', height: 160, borderRadius: 12, marginBottom: 10 },
+  preview: { width: '100%', height: 200, borderRadius: 12, backgroundColor: '#eee' },
+  imgWrap: { position: 'relative', marginBottom: 12 },
+  removeImg: { position: 'absolute', top: 8, right: 8, backgroundColor: '#fff', borderRadius: 20 },
+  imgBtn: { flex: 1, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 12 },
+  imgBtnTxt: { color: '#fff', fontWeight: '700' },
   hintLbl: { fontSize: 12, color: theme.colors.textSecondary, fontWeight: '700', marginBottom: 6, marginTop: 4 },
   checkRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginVertical: 8 },
   checkTxt: { color: theme.colors.textPrimary, fontSize: 13 },
