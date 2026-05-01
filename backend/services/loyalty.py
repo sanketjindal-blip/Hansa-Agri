@@ -108,7 +108,12 @@ async def update_lead_status(lead_id: str, new_status: str, notes: str,
     if notes:
         update["notes"] = (lead.get("notes", "") + "\n[admin] " + notes).strip()
     # Award points exactly once when transitioning into 'purchased'.
-    if new_status == "purchased" and lead.get("status") != "purchased" and not lead.get("points_awarded"):
+    # Skip the payout for admin-created leads (no referrer_user_id) — they're
+    # tracked for sales pipeline only, not the referral programme.
+    if (new_status == "purchased"
+            and lead.get("status") != "purchased"
+            and not lead.get("points_awarded")
+            and lead.get("referrer_user_id")):
         new_balance = await adjust_points(
             lead["referrer_user_id"],
             LEAD_REWARD_POINTS,

@@ -413,11 +413,24 @@ backend:
 
   - task: "Lead referral & loyalty points system"
     implemented: true
-    working: "NA"
+    working: true
     file: "backend/services/loyalty.py + backend/routes/loyalty.py + backend/routes/admin.py + backend/routes/orders.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
+    status_history:
+      - working: false
+        agent: "testing"
+        comment: "Previously: PATCH /admin/leads/{id} status=purchased for admin-created lead returned 400 'User not found' because loyalty.update_lead_status tried to adjust_points('') when referrer_user_id was empty."
+      - working: true
+        agent: "testing"
+        comment: |
+          Retest after loyalty.py fix (guard `and lead.get('referrer_user_id')` on line 116) — 9/9 assertions PASS via /app/backend_test_retest.py.
+          1) POST /api/admin/leads {name:'Retest Caller', phone:'+919999000333', manager_ids:[], all_managers:false} → 200. Response has admin_created=True, referrer_user_id='', assigned_manager_ids=[].
+          2) PATCH /api/admin/leads/{lead_id} {status:'purchased', notes:''} → 200 (previously 400). status='purchased', points_awarded=0 (no payout because referrer_user_id is empty).
+          3) Sanity payout path: customer ramesh logged in, submitted lead '+919877777701', admin marked purchased → points_awarded=500, referrer balance went 0→500 (delta=+500). Referral payout still works correctly.
+          4) GET /api/admin/leads confirms retest lead has status='purchased'.
+          No 5xx. Fix verified.
 
 frontend:
   - task: "Login screen - mobile OTP only (remove email/admin login UI)"
@@ -578,3 +591,22 @@ frontend:
          PATCH invalid status -> 400; PATCH non-existent id -> 404; GET /manager/leads -> 200 list.
       D) Gating: customer hitting /manager/service-requests, /manager/leads, /admin/managers all return 403.
       No backend errors in logs. Feature cleared; no further backend retest required.
+
+
+  - agent: "testing"
+    message: |
+      Retest for previously failing loyalty/admin-lead PATCH purchased — PASS (9/9, zero 5xx)
+      via /app/backend_test_retest.py after the fix in services/loyalty.py:116
+      (added `and lead.get('referrer_user_id')` guard).
+      1) POST /api/admin/leads {name:'Retest Caller', phone:'+919999000333',
+         manager_ids:[], all_managers:false} → 200; response has admin_created=True,
+         referrer_user_id='', assigned_manager_ids=[].
+      2) PATCH /api/admin/leads/{lead_id} {status:'purchased', notes:''} → **200**
+         (previously 400 "User not found"). status='purchased', points_awarded=0
+         (no payout — expected for admin-created lead with empty referrer).
+      3) Sanity of original referral payout path: logged in as ramesh@farm.com (customer),
+         posted a lead '+919877777701', admin marked purchased → response points_awarded=500,
+         ramesh /me/points balance 0→500 (delta +500). Referral flow intact.
+      4) GET /api/admin/leads confirms retest lead with status='purchased'.
+      Backend logs show 200s throughout, no 5xx. Task "Lead referral & loyalty points system"
+      set to working:true. No further backend retest required for this fix.
