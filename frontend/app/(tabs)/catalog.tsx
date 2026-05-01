@@ -12,7 +12,7 @@ export default function Catalog() {
   const params = useLocalSearchParams<{ category?: string }>();
   const { t } = useI18n();
   const [products, setProducts] = useState<any[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [active, setActive] = useState<string>((params.category as string) || 'all');
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(true);
@@ -22,7 +22,7 @@ export default function Catalog() {
     try {
       const [p, c] = await Promise.all([
         api.get('/products', { params: { category: active, q: q || undefined } }),
-        api.get('/products/categories'),
+        api.get('/categories'),
       ]);
       setProducts(p.data);
       setCategories(c.data);
@@ -55,10 +55,15 @@ export default function Catalog() {
         />
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 44 }} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
-        {['all', ...categories].map(c => (
-          <TouchableOpacity key={c} testID={`chip-${c}`} onPress={() => setActive(c)} style={[styles.chip, active === c && styles.chipActive]}>
-            <Text style={[styles.chipTxt, active === c && styles.chipTxtActive]}>{c === 'all' ? t('all') : c}</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 48 }} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, alignItems: 'center' }}>
+        <TouchableOpacity testID="chip-all" onPress={() => setActive('all')} style={[styles.chip, active === 'all' && styles.chipActive]}>
+          <Ionicons name="apps" size={14} color={active === 'all' ? '#fff' : theme.colors.textSecondary} />
+          <Text style={[styles.chipTxt, active === 'all' && styles.chipTxtActive]}>{t('all')}</Text>
+        </TouchableOpacity>
+        {categories.map((c: any) => (
+          <TouchableOpacity key={c.key} testID={`chip-${c.key}`} onPress={() => setActive(c.key)} style={[styles.chip, active === c.key && styles.chipActive]}>
+            <Ionicons name={(c.icon || 'cube') as any} size={14} color={active === c.key ? '#fff' : theme.colors.textSecondary} />
+            <Text style={[styles.chipTxt, active === c.key && styles.chipTxtActive]}>{c.label || c.key}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -99,7 +104,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: '700', color: theme.colors.textPrimary },
   searchBox: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, backgroundColor: '#fff', borderRadius: 14, paddingHorizontal: 12, borderWidth: 1, borderColor: theme.colors.border, marginBottom: 12 },
   searchInput: { flex: 1, paddingVertical: 12, paddingHorizontal: 8, color: theme.colors.textPrimary },
-  chip: { paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#fff', borderRadius: 999, borderWidth: 1, borderColor: theme.colors.border, height: 36 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#fff', borderRadius: 999, borderWidth: 1, borderColor: theme.colors.border, height: 36 },
   chipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
   chipTxt: { color: theme.colors.textSecondary, fontWeight: '600', fontSize: 12 },
   chipTxtActive: { color: '#fff' },

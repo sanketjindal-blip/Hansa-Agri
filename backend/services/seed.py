@@ -155,6 +155,47 @@ async def seed_settings():
         })
 
 
+# Default category set with icons. Admin can edit/add/remove via Admin Console.
+DEFAULT_CATEGORIES = [
+    {"key": "Tiller", "label": "Tiller", "icon": "construct", "sort_order": 10},
+    {"key": "Harrow", "label": "Harrow", "icon": "disc", "sort_order": 20},
+    {"key": "Plough", "label": "Plough", "icon": "hammer", "sort_order": 30},
+    {"key": "Cultivator", "label": "Cultivator", "icon": "leaf", "sort_order": 40},
+    {"key": "Subsoiler", "label": "Subsoiler", "icon": "arrow-down", "sort_order": 50},
+    {"key": "Leveller", "label": "Leveller", "icon": "resize", "sort_order": 60},
+    {"key": "Weeder", "label": "Weeder", "icon": "flower", "sort_order": 70},
+    {"key": "Bund Maker", "label": "Bund Maker", "icon": "layers", "sort_order": 80},
+    {"key": "Ridger", "label": "Ridger", "icon": "triangle", "sort_order": 90},
+    {"key": "Trench Maker", "label": "Trench Maker", "icon": "git-branch", "sort_order": 100},
+]
+
+
+async def seed_categories():
+    """Seed configurable categories. Picks up any product category not yet
+    in the categories collection so the admin can manage them later."""
+    existing_keys = set(await db.categories.distinct("key"))
+    for c in DEFAULT_CATEGORIES:
+        if c["key"] not in existing_keys:
+            await db.categories.insert_one({
+                "id": str(uuid.uuid4()),
+                "active": True,
+                **c,
+            })
+            existing_keys.add(c["key"])
+    # Pick up any product categories not yet present
+    product_cats = await db.products.distinct("category")
+    sort = 200
+    for k in product_cats:
+        if k and k not in existing_keys:
+            await db.categories.insert_one({
+                "id": str(uuid.uuid4()),
+                "key": k, "label": k, "icon": "cube",
+                "sort_order": sort, "active": True,
+            })
+            sort += 10
+            existing_keys.add(k)
+
+
 async def migrate_demo_customer_phone():
     """Move legacy Ramesh demo customer (was on +919045666666 - now an admin
     phone) onto a non-admin number; downgrade his role to customer."""
@@ -179,6 +220,7 @@ async def run_all():
     await db.leads.create_index("id", unique=True)
     await db.leads.create_index("referrer_user_id")
     await db.points_transactions.create_index("user_id")
+    await db.categories.create_index("key", unique=True)
     await seed_admin()
     await seed_admin_phones()
     await migrate_demo_customer_phone()
@@ -188,3 +230,4 @@ async def run_all():
     await seed_demo_customer()
     await seed_dealers()
     await seed_settings()
+    await seed_categories()

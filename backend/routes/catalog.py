@@ -20,8 +20,16 @@ async def list_products(category: Optional[str] = None, q: Optional[str] = None)
 
 @router.get("/products/categories")
 async def list_categories():
+    """Legacy: distinct categories from products. Kept for backwards compat."""
     cats = await db.products.distinct("category")
     return sorted(cats)
+
+
+@router.get("/categories")
+async def list_category_config():
+    """New: configurable categories with icon/label/sort_order, managed in admin."""
+    items = await db.categories.find({"active": {"$ne": False}}, {"_id": 0}).sort("sort_order", 1).to_list(200)
+    return items
 
 
 @router.get("/products/featured")

@@ -194,6 +194,35 @@ agent_communication:
       Test creds in /app/memory/test_credentials.md.
 
 backend:
+  - task: "Configurable categories with admin CRUD + icons"
+    implemented: true
+    working: true
+    file: "backend/routes/catalog.py + backend/routes/admin.py + backend/services/seed.py + frontend/app/admin-categories.tsx + frontend/app/(tabs)/catalog.tsx + frontend/app/(tabs)/index.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          Full regression passed — 21/21 assertions via /app/backend_test_categories.py.
+          Verified: (1) GET /api/categories public returns 10 default categories {Tiller, Harrow, Plough, Cultivator, Subsoiler, Leveller, Weeder, Bund Maker, Ridger, Trench Maker} sorted ascending by sort_order with correct shape {id, key, label, icon, sort_order, active} and active-only filter. (2) GET /api/admin/categories returns full list (admin), 401 without auth. (3) POST valid category 200 with id; duplicate key → 400; customer token → 403. (4) PATCH icon/label/active=false 200 and public list correctly excludes inactive; re-PATCH with key NewKey 200 and response reflects rename. (5) DELETE returns {deleted:true}; re-DELETE → 404. (6) Negative: empty key → 400 "key is required"; PATCH non-existent id → 404; DELETE non-existent id → 404. No 5xx observed. Backend logs clean.
+      - working: "NA"
+        agent: "main"
+        comment: |
+          New `categories` collection {id, key, label, icon, sort_order, active}.
+          Endpoints:
+            GET  /api/categories  — public, returns active categories sorted by sort_order
+            GET  /api/admin/categories  — admin, includes inactive
+            POST /api/admin/categories  {key, label, icon, sort_order, active}
+            PATCH /api/admin/categories/{id}  — also renames matching products' category if key changed
+            DELETE /api/admin/categories/{id}
+          Seed sets the original 10 (Tiller/Harrow/Plough/Cultivator/Subsoiler/Leveller/Weeder/Bund Maker/Ridger/Trench Maker) with default Ionicons. Auto-picks up any product category not yet configured.
+          Frontend:
+            - Catalog & Home now read from /categories with icon chips (Ionicons name from DB).
+            - New /admin-categories screen has add/edit/delete + icon picker (~46 Ionicons options) + active toggle + sort_order.
+          Smoke-tested CRUD: create/update (rename + hide)/delete; public correctly omits inactive.
+
   - task: "Mobile-OTP-only Admin login (seed admin phones)"
     implemented: true
     working: true
@@ -277,3 +306,15 @@ frontend:
       (b) FB scraping is rate-limited but the static fallback object is returned
       as designed with name+page_url populated. (c) No mocks in backend code.
       All auth gates return correct 401/403. No further backend retest required.
+  - agent: "testing"
+    message: |
+      Manage Categories regression (new feature) — 21/21 assertions passed, zero 5xx.
+      Ran /app/backend_test_categories.py against the public preview URL. Covered:
+      GET /api/categories public (shape {id, key, label, icon, sort_order, active},
+      sorted ascending by sort_order, contains all 10 defaults, active-only),
+      GET /api/admin/categories (admin 200 / anon 401), POST /api/admin/categories
+      (valid 200 with id, duplicate key → 400, customer token → 403), PATCH
+      (icon+label+active=false 200 and public list correctly excludes inactive,
+      re-PATCH key rename → 200), DELETE (200 {deleted:true}, re-DELETE → 404),
+      negatives (empty key → 400 "key is required", PATCH/DELETE unknown id → 404).
+      No backend errors. Feature cleared.

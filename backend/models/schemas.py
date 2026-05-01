@@ -150,3 +150,11 @@ class AssignWarrantyIn(BaseModel):
 class DealerLoginIn(BaseModel):
     phone: str
     dealer_id: str
+
+
+class CategoryIn(BaseModel):
+    key: str
+    label: str
+    icon: str = "cube"
+    sort_order: int = 100
+    active: bool = True

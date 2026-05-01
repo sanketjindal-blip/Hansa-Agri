@@ -8,7 +8,7 @@ from core.helpers import normalize_phone
 from core.security import require_admin, hash_password
 from models.schemas import (
     AdminProductIn, AdminNewsIn, AdminOfferIn, DealerIn, CompanyIn,
-    AssignWarrantyIn, DealerLoginIn, LeadStatusIn, PointsAdjustIn,
+    AssignWarrantyIn, DealerLoginIn, LeadStatusIn, PointsAdjustIn, CategoryIn,
 )
 from services.warranty import assign_warranty as _assign_warranty
 from services import loyalty
@@ -237,3 +237,50 @@ async def adjust_points(body: PointsAdjustIn, user=Depends(require_admin)):
     except Exception:
         pass
     return {"user_id": body.user_id, "delta": body.delta, "balance": new_balance}
+
+
+# ---- Categories (admin) ----
+@router.get("/categories")
+async def list_admin_categories(user=Depends(require_admin)):
+    items = await db.categories.find({}, {"_id": 0}).sort("sort_order", 1).to_list(200)
+    return items
+
+
+@router.post("/categories")
+async def create_category(body: CategoryIn, user=Depends(require_admin)):
+    key = body.key.strip()
+    if not key:
+        raise HTTPException(status_code=400, detail="key is required")
+    if await db.categories.find_one({"key": key}):
+        raise HTTPException(status_code=400, detail="Category key already exists")
+    doc = body.dict()
+    doc["id"] = str(uuid.uuid4())
+    doc["key"] = key
+    await db.categories.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@router.patch("/categories/{cat_id}")
+async def update_category(cat_id: str, body: CategoryIn, user=Depends(require_admin)):
+    existing = await db.categories.find_one({"id": cat_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Category not found")
+    update = body.dict()
+    new_key = update["key"].strip()
+    update["key"] = new_key
+    # If admin renamed the key, sync products that referenced the old key.
+    if existing["key"] != new_key:
+        await db.products.update_many(
+            {"category": existing["key"]}, {"$set": {"category": new_key}}
+        )
+    await db.categories.update_one({"id": cat_id}, {"$set": update})
+    return await db.categories.find_one({"id": cat_id}, {"_id": 0})
+
+
+@router.delete("/categories/{cat_id}")
+async def delete_category(cat_id: str, user=Depends(require_admin)):
+    res = await db.categories.delete_one({"id": cat_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Category not found")
+    return {"deleted": True}

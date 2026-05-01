@@ -33,6 +33,7 @@ export default function Profile() {
     ...(user?.role === 'admin' ? [
       { icon: 'construct-outline', label: t('admin_dashboard'), onPress: () => router.push('/admin') },
       { icon: 'cube-outline', label: 'Manage Products', onPress: () => router.push('/admin-products') },
+      { icon: 'apps-outline', label: 'Manage Categories', onPress: () => router.push('/admin-categories') },
       { icon: 'people-outline', label: 'Leads & Points', onPress: () => router.push('/admin-leads') },
       { icon: 'settings-outline', label: 'Admin Console (Dealers / Warranty / Company)', onPress: () => router.push('/admin-console') },
       { icon: 'storefront-outline', label: 'Dealer Portal', onPress: () => router.push('/dealer-portal') },

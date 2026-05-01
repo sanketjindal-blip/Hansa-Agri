@@ -10,12 +10,6 @@ import { useI18n } from '../../src/i18n';
 import { HansaLogo } from '../../src/components/HansaLogo';
 import { theme, formatINR } from '../../src/theme';
 
-const CAT_ICONS: Record<string, any> = {
-  Tiller: 'construct', Harrow: 'disc', Plough: 'hammer', Cultivator: 'leaf',
-  Subsoiler: 'arrow-down', Leveller: 'resize', Weeder: 'flower', 'Bund Maker': 'layers',
-  Ridger: 'triangle', 'Trench Maker': 'git-branch',
-};
-
 export default function Home() {
   const router = useRouter();
   const { user } = useAuth();
@@ -24,7 +18,7 @@ export default function Home() {
   const [featured, setFeatured] = useState<any[]>([]);
   const [news, setNews] = useState<any[]>([]);
   const [offers, setOffers] = useState<any[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [expiringWarranty, setExpiringWarranty] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -35,7 +29,7 @@ export default function Home() {
         api.get('/products/featured'),
         api.get('/news'),
         api.get('/offers'),
-        api.get('/products/categories'),
+        api.get('/categories'),
       ]);
       setFeatured(f.data);
       setNews(n.data);
@@ -126,10 +120,10 @@ export default function Home() {
         {/* Categories */}
         <Text style={[styles.sectionTitle, { paddingHorizontal: 16, marginTop: 24 }]}>{t('shop_by_cat')}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 12, paddingVertical: 12 }}>
-          {categories.map(c => (
-            <TouchableOpacity key={c} testID={`cat-${c}`} style={styles.catChip} onPress={() => router.push({ pathname: '/(tabs)/catalog', params: { category: c } })}>
-              <View style={styles.catIcon}><Ionicons name={(CAT_ICONS[c] || 'cube') as any} size={22} color={theme.colors.primary} /></View>
-              <Text style={styles.catTxt} numberOfLines={1}>{c}</Text>
+          {categories.map((c: any) => (
+            <TouchableOpacity key={c.key} testID={`cat-${c.key}`} style={styles.catChip} onPress={() => router.push({ pathname: '/(tabs)/catalog', params: { category: c.key } })}>
+              <View style={styles.catIcon}><Ionicons name={(c.icon || 'cube') as any} size={22} color={theme.colors.primary} /></View>
+              <Text style={styles.catTxt} numberOfLines={1}>{c.label || c.key}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
