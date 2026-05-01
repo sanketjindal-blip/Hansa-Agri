@@ -1,46 +1,45 @@
-# RKAI Customer App - Product Requirements Document
+# HANSA (हंसा) Customer App - Product Requirements Document
 
-## Overview
-Customer-facing mobile app for **Ramkishan Agri Innovate Pvt Ltd (RKAI)**, an agriculture machinery manufacturer (Meerut / Hapur, U.P.). Built with React Native Expo (mobile) + FastAPI + MongoDB.
+## Brand
+- **Company:** Ramkishan Agri Innovate Pvt Ltd (RKAI)
+- **Brand name:** **HANSA / हंसा**
+- **Tagline:** हमारी संस्कृति ही कृषि है — OUR CULTURE IS AGRICULTURE
+- **Logo:** bundled at `/app/frontend/assets/images/hansa-logo.jpeg`
+- **Colors:** Orange `#FF6600` + Green `#2E7D32` (from logo).
 
-**Tagline:** OUR CULTURE IS AGRICULTURE — Energizing the Future of Farming.
-
-## Core Features (Shipped)
-
+## Features
 ### Customer
-1. **Auth** — JWT email/password signup & login (AsyncStorage token persistence). Demo account pre-seeded.
-2. **Home Dashboard** — Brand hero banner, warranty-expiry alert (< 60 days), active offers, category quick-links, featured products, latest updates, quick actions (Warranty / Dealers / Support).
-3. **Product Catalog** — 19 RKAI products seeded from official catalogue (Tillers, Harrows, Ploughs, Cultivators, Ridgers, Subsoilers, Levellers, Weeders, Bund & Trench makers). Category filter + search.
-4. **Product Detail** — Full specs table, key features, MRP + discount %, warranty months, recommended tractor HP, Add-to-Cart & Buy-Now.
-5. **Cart** — AsyncStorage-persisted cart (survives app reload), quantity stepper, remove.
-6. **Checkout** — Shipping address, promo codes (RKAI10, HARROW15, FARMER500 seeded), payment methods: COD + Razorpay (UPI/Card/Netbanking via WebView — requires API keys).
-7. **My Purchases** — Order history with dates, status, items, total, warranty link.
-8. **Warranty Tracker** — Auto-derived from orders. Progress bar, days left, active/expired status, claim button → support.
-9. **News & Updates** — Company announcements, product launches.
-10. **Offers & Discounts** — Promo banner cards with tap-to-copy codes.
-11. **Service / Support** — Submit ticket + view ticket list. Direct call & email to +91 9045 333 332 / support@agriequipments.com.
-12. **Dealer Locator** — 8 dealer locations across UP, Punjab, Bihar, Maharashtra, MP, Karnataka with Call / WhatsApp / Google-Maps deep-links.
-13. **Profile** — User info, company contact, all menu links.
+- JWT auth (signup/login), AsyncStorage token persistence.
+- **Bilingual UI (English + हिन्दी)** via in-app i18n with toggle in Profile → Language.
+- Home: HANSA logo header, warranty-expiry banner, hero, offers, categories, featured products, news, quick actions (Warranty / Dealers / Support).
+- Catalog with search + category filter · product detail (specs/features/HP/warranty) · Add-to-Cart / Buy-Now.
+- Cart (AsyncStorage persisted) → Checkout (address, promo codes, COD + Razorpay WebView) → Order.
+- **SMS on order placement** via Twilio (to farmer's phone).
+- My Purchases · Warranty Tracker (auto-computed, progress bars, claim) · News · Offers · Dealer Locator (Call / WhatsApp / Maps) · Support tickets.
 
-### Admin (role=admin only)
-- Admin Dashboard with live stats (users, products, orders, open tickets).
-- Publish News posts.
-- Create Offers / promo codes.
-- (Product create/delete endpoints also available via `/api/admin/products`).
+### Admin (role=admin)
+- Admin Dashboard (live stats).
+- Publish News + Create Offers.
+- **Full Product CRUD UI** (`/admin-products`): list, create, edit (all fields including specs as Key:Value lines, features per-line, featured flag, image URL preview), delete.
+- **Warranty SMS reminders**: one-tap button sends SMS to every farmer whose warranty expires within 45 days.
 
-## Tech Stack
+## Tech
 - **Frontend:** React Native Expo SDK 54, Expo Router, AsyncStorage, axios, react-native-webview.
-- **Backend:** FastAPI, Motor (async MongoDB), JWT (pyjwt), bcrypt, razorpay SDK (optional).
-- **Design:** Brand colors (Orange #FF6600, Green #2E7D32) from RKAI logo. Outfit/Manrope typography guidelines.
+- **Backend:** FastAPI, Motor (MongoDB), JWT (pyjwt), bcrypt, twilio SDK, razorpay SDK (optional).
+- **i18n:** custom lightweight provider keyed in AsyncStorage.
 
-## Seed Data
-- **Admin:** `admin@rkai.com` / `admin123`
-- **Demo customer:** `ramesh@farm.com` / `farmer123` (has 2 past orders → 3 live warranty records)
-- **Promo codes:** RKAI10, HARROW15, FARMER500
+## Credentials
+- Admin: `admin@rkai.com` / `admin123`
+- Demo farmer: `ramesh@farm.com` / `farmer123` (2 past orders → 3 warranty records)
+- Twilio: ACCOUNT_SID `AC7c374dee4fa5d31ee4783dcf38bf041b`, FROM `+16184861759` (configured).
+- Razorpay: keys empty — Razorpay option is disabled in checkout until you populate `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET`.
 
-## Mocked / Pending
-- **Razorpay**: Integration implemented end-to-end (create-order + signature verify + WebView checkout) — user must add `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` to `/app/backend/.env` to enable. Until then, Razorpay option is shown disabled and COD is the only active payment method.
-- **Push notifications**: Replaced with in-app warranty-expiry alert banner on Home (no APNs/FCM setup needed).
+## Notes / Caveats
+- Twilio trial accounts only send to **verified recipient numbers**. Verify the test farmer's number in the Twilio console, or upgrade account, to see actual SMS. The backend does not fail if SMS is rejected — it logs silently.
+- Razorpay checkout is fully implemented (create-order, WebView checkout, signature verify) and activates automatically once keys are added.
+- Hindi translations cover all tabs, headers, CTAs, empty-states, warranty/orders/cart/profile/catalog; product data (names, specs) stays in English (as in the catalogue).
 
-## Business Enhancement Hook
-**Warranty-expiry alerts** drive return customers — farmers see a bright in-app banner 60 days before expiry with a one-tap shortcut to raise a service claim or re-order. This reliably converts warranty events into service & upsell revenue.
+## Business Hooks
+- **Warranty reminders** via Twilio SMS drive re-engagement and service revenue.
+- **Promo codes** (RKAI10, HARROW15, FARMER500) lift conversion.
+- **Hindi UI** doubles addressable market in rural UP/Bihar/MP/Maharashtra.

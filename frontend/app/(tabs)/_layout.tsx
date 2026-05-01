@@ -3,13 +3,14 @@ import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../../src/theme';
 import { useCart } from '../../src/CartContext';
+import { useI18n } from '../../src/i18n';
 import { View, Text, StyleSheet } from 'react-native';
 
 function CartBadge({ focused }: { focused: boolean }) {
   const { count } = useCart();
   return (
     <View>
-      <Ionicons name={focused ? 'cart' : 'cart-outline'} size={24} color={focused ? theme.colors.primary : theme.colors.textSecondary} />
+      <Ionicons name={focused ? 'bag' : 'bag-outline'} size={24} color={focused ? theme.colors.primary : theme.colors.textSecondary} />
       {count > 0 && (
         <View style={s.badge}>
           <Text style={s.badgeTxt}>{count}</Text>
@@ -20,6 +21,7 @@ function CartBadge({ focused }: { focused: boolean }) {
 }
 
 export default function TabsLayout() {
+  const { t } = useI18n();
   return (
     <Tabs
       screenOptions={{
@@ -30,11 +32,11 @@ export default function TabsLayout() {
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
       }}
     >
-      <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: ({ focused, color }) => <Ionicons name={focused ? 'home' : 'home-outline'} size={24} color={color} /> }} />
-      <Tabs.Screen name="catalog" options={{ title: 'Products', tabBarIcon: ({ focused, color }) => <Ionicons name={focused ? 'grid' : 'grid-outline'} size={24} color={color} /> }} />
-      <Tabs.Screen name="warranty" options={{ title: 'Warranty', tabBarIcon: ({ focused, color }) => <Ionicons name={focused ? 'shield-checkmark' : 'shield-checkmark-outline'} size={24} color={color} /> }} />
-      <Tabs.Screen name="orders" options={{ title: 'Orders', tabBarIcon: ({ focused }) => <CartBadge focused={focused} /> }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ focused, color }) => <Ionicons name={focused ? 'person' : 'person-outline'} size={24} color={color} /> }} />
+      <Tabs.Screen name="index" options={{ title: t('home'), tabBarIcon: ({ focused, color }) => <Ionicons name={focused ? 'home' : 'home-outline'} size={24} color={color} /> }} />
+      <Tabs.Screen name="catalog" options={{ title: t('products'), tabBarIcon: ({ focused, color }) => <Ionicons name={focused ? 'grid' : 'grid-outline'} size={24} color={color} /> }} />
+      <Tabs.Screen name="warranty" options={{ title: t('warranty'), tabBarIcon: ({ focused, color }) => <Ionicons name={focused ? 'shield-checkmark' : 'shield-checkmark-outline'} size={24} color={color} /> }} />
+      <Tabs.Screen name="orders" options={{ title: t('orders'), tabBarIcon: ({ focused }) => <CartBadge focused={focused} /> }} />
+      <Tabs.Screen name="profile" options={{ title: t('profile'), tabBarIcon: ({ focused, color }) => <Ionicons name={focused ? 'person' : 'person-outline'} size={24} color={color} /> }} />
     </Tabs>
   );
 }

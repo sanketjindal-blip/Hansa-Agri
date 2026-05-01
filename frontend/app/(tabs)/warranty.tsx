@@ -4,10 +4,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../../src/api';
+import { useI18n } from '../../src/i18n';
 import { theme } from '../../src/theme';
 
 export default function Warranty() {
   const router = useRouter();
+  const { t } = useI18n();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -28,8 +30,8 @@ export default function Warranty() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.title}>Warranty Tracker</Text>
-        <Text style={styles.sub}>All your products & their coverage</Text>
+        <Text style={styles.title}>{t('warranty_tracker')}</Text>
+        <Text style={styles.sub}>{t('coverage_sub')}</Text>
       </View>
       {loading ? (
         <ActivityIndicator color={theme.colors.primary} style={{ marginTop: 40 }} />
@@ -62,21 +64,21 @@ export default function Warranty() {
                   </View>
                   <View style={[styles.statusPill, { backgroundColor: active ? '#E6F5EA' : '#FDE8E8' }]}>
                     <Text style={[styles.statusTxt, { color: active ? theme.colors.secondary : theme.colors.danger }]}>
-                      {active ? 'ACTIVE' : 'EXPIRED'}
+                      {active ? t('active') : t('expired')}
                     </Text>
                   </View>
                 </View>
                 <View style={styles.datesRow}>
-                  <View><Text style={styles.dateLbl}>Purchased</Text><Text style={styles.dateVal}>{new Date(item.purchase_date).toLocaleDateString('en-IN')}</Text></View>
-                  <View><Text style={styles.dateLbl}>Expires</Text><Text style={styles.dateVal}>{new Date(item.expiry_date).toLocaleDateString('en-IN')}</Text></View>
-                  <View><Text style={styles.dateLbl}>Days Left</Text><Text style={[styles.dateVal, { color: active ? theme.colors.secondary : theme.colors.danger }]}>{item.days_left}</Text></View>
+                  <View><Text style={styles.dateLbl}>{t('purchased')}</Text><Text style={styles.dateVal}>{new Date(item.purchase_date).toLocaleDateString('en-IN')}</Text></View>
+                  <View><Text style={styles.dateLbl}>{t('expires')}</Text><Text style={styles.dateVal}>{new Date(item.expiry_date).toLocaleDateString('en-IN')}</Text></View>
+                  <View><Text style={styles.dateLbl}>{t('days_left_lbl')}</Text><Text style={[styles.dateVal, { color: active ? theme.colors.secondary : theme.colors.danger }]}>{item.days_left}</Text></View>
                 </View>
                 <View style={styles.progressTrack}>
                   <View style={[styles.progressFill, { width: `${Math.min(100, Math.max(0, item.percent_remaining))}%`, backgroundColor: active ? theme.colors.secondary : theme.colors.danger }]} />
                 </View>
                 <TouchableOpacity testID={`claim-${item.id}`} style={[styles.claimBtn, !active && styles.claimDisabled]} disabled={!active} onPress={() => router.push('/support')}>
                   <Ionicons name="construct-outline" size={16} color="#fff" />
-                  <Text style={styles.claimTxt}>{active ? 'Claim Warranty' : 'Warranty Expired'}</Text>
+                  <Text style={styles.claimTxt}>{active ? t('claim_warranty') : t('warranty_expired_btn')}</Text>
                 </TouchableOpacity>
               </View>
             );

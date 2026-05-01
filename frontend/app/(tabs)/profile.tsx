@@ -4,26 +4,32 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/AuthContext';
+import { useI18n } from '../../src/i18n';
+import { HansaLogo } from '../../src/components/HansaLogo';
 import { theme } from '../../src/theme';
 
 export default function Profile() {
   const router = useRouter();
   const { user, logout } = useAuth();
+  const { t, lang, setLang } = useI18n();
 
   const menu = [
-    { icon: 'bag-outline', label: 'My Orders', onPress: () => router.push('/(tabs)/orders') },
-    { icon: 'shield-checkmark-outline', label: 'Warranty', onPress: () => router.push('/(tabs)/warranty') },
-    { icon: 'pricetag-outline', label: 'Offers & Discounts', onPress: () => router.push('/offers') },
-    { icon: 'newspaper-outline', label: 'News & Updates', onPress: () => router.push('/news') },
-    { icon: 'location-outline', label: 'Find a Dealer', onPress: () => router.push('/dealers') },
-    { icon: 'headset-outline', label: 'Support & Service', onPress: () => router.push('/support') },
-    ...(user?.role === 'admin' ? [{ icon: 'construct-outline', label: 'Admin Dashboard', onPress: () => router.push('/admin') }] : []),
+    { icon: 'bag-outline', label: t('my_orders'), onPress: () => router.push('/(tabs)/orders') },
+    { icon: 'shield-checkmark-outline', label: t('warranty'), onPress: () => router.push('/(tabs)/warranty') },
+    { icon: 'pricetag-outline', label: t('offers_discounts'), onPress: () => router.push('/offers') },
+    { icon: 'newspaper-outline', label: t('news_updates'), onPress: () => router.push('/news') },
+    { icon: 'location-outline', label: t('find_dealer'), onPress: () => router.push('/dealers') },
+    { icon: 'headset-outline', label: t('support_service'), onPress: () => router.push('/support') },
+    ...(user?.role === 'admin' ? [
+      { icon: 'construct-outline', label: t('admin_dashboard'), onPress: () => router.push('/admin') },
+      { icon: 'cube-outline', label: 'Manage Products', onPress: () => router.push('/admin-products') },
+    ] : []),
   ];
 
   const onLogout = () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
+    Alert.alert(t('logout'), 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Logout', style: 'destructive', onPress: async () => { await logout(); router.replace('/(auth)/login'); } },
+      { text: t('logout'), style: 'destructive', onPress: async () => { await logout(); router.replace('/(auth)/login'); } },
     ]);
   };
 
@@ -40,7 +46,19 @@ export default function Profile() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account</Text>
+          <Text style={styles.sectionTitle}>{t('language')}</Text>
+          <View style={styles.langRow}>
+            <TouchableOpacity testID="lang-en" onPress={() => setLang('en')} style={[styles.langBtn, lang === 'en' && styles.langActive]}>
+              <Text style={[styles.langTxt, lang === 'en' && styles.langTxtActive]}>English</Text>
+            </TouchableOpacity>
+            <TouchableOpacity testID="lang-hi" onPress={() => setLang('hi')} style={[styles.langBtn, lang === 'hi' && styles.langActive]}>
+              <Text style={[styles.langTxt, lang === 'hi' && styles.langTxtActive]}>हिन्दी</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{t('account')}</Text>
           {menu.map(m => (
             <TouchableOpacity key={m.label} testID={`menu-${m.label}`} style={styles.row} onPress={m.onPress}>
               <View style={styles.iconBox}><Ionicons name={m.icon as any} size={20} color={theme.colors.primary} /></View>
@@ -51,19 +69,22 @@ export default function Profile() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Company</Text>
+          <Text style={styles.sectionTitle}>{t('company')}</Text>
           <View style={styles.info}>
-            <Text style={styles.infoTitle}>Ramkishan Agri Innovate Pvt Ltd</Text>
+            <View style={{ alignItems: 'center', marginBottom: 10 }}>
+              <HansaLogo size={80} />
+            </View>
+            <Text style={styles.infoTitle}>{t('app_name')} — Ramkishan Agri Innovate Pvt Ltd</Text>
             <Text style={styles.infoLine}>Plot No. 26, Harsh Commercial Park, Garh Road, Meerut-250002</Text>
             <Text style={styles.infoLine}>+91 9045 333 332  ·  +91 9479 333 332</Text>
             <Text style={styles.infoLine}>support@agriequipments.com</Text>
-            <Text style={styles.infoTag}>OUR CULTURE IS AGRICULTURE</Text>
+            <Text style={styles.infoTag}>{t('tagline')}</Text>
           </View>
         </View>
 
         <TouchableOpacity testID="logout-btn" style={styles.logoutBtn} onPress={onLogout}>
           <Ionicons name="log-out-outline" size={20} color={theme.colors.danger} />
-          <Text style={styles.logoutTxt}>Logout</Text>
+          <Text style={styles.logoutTxt}>{t('logout')}</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -80,13 +101,18 @@ const styles = StyleSheet.create({
   phone: { fontSize: 12, color: theme.colors.textMuted, marginTop: 2 },
   section: { marginTop: 20 },
   sectionTitle: { fontSize: 12, fontWeight: '700', color: theme.colors.textMuted, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 10, paddingLeft: 4 },
+  langRow: { flexDirection: 'row', gap: 10 },
+  langBtn: { flex: 1, paddingVertical: 12, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: theme.colors.border, alignItems: 'center' },
+  langActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+  langTxt: { color: theme.colors.textPrimary, fontWeight: '700' },
+  langTxtActive: { color: '#fff' },
   row: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: theme.colors.border, marginBottom: 8, gap: 12 },
   iconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#FFF4EA', alignItems: 'center', justifyContent: 'center' },
   rowLbl: { flex: 1, fontSize: 14, fontWeight: '600', color: theme.colors.textPrimary },
   info: { backgroundColor: '#fff', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: theme.colors.border, borderLeftWidth: 4, borderLeftColor: theme.colors.secondary },
-  infoTitle: { fontSize: 15, fontWeight: '800', color: theme.colors.textPrimary },
-  infoLine: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 4 },
-  infoTag: { fontSize: 10, color: theme.colors.primary, letterSpacing: 2, fontWeight: '700', marginTop: 10 },
+  infoTitle: { fontSize: 15, fontWeight: '800', color: theme.colors.textPrimary, textAlign: 'center' },
+  infoLine: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 4, textAlign: 'center' },
+  infoTag: { fontSize: 11, color: theme.colors.primary, letterSpacing: 2, fontWeight: '700', marginTop: 10, textAlign: 'center' },
   logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FDE8E8', paddingVertical: 14, borderRadius: 12, marginTop: 24 },
   logoutTxt: { color: theme.colors.danger, fontWeight: '700' },
 });

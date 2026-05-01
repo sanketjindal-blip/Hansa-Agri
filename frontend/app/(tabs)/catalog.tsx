@@ -4,11 +4,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../../src/api';
+import { useI18n } from '../../src/i18n';
 import { theme, formatINR } from '../../src/theme';
 
 export default function Catalog() {
   const router = useRouter();
   const params = useLocalSearchParams<{ category?: string }>();
+  const { t } = useI18n();
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [active, setActive] = useState<string>((params.category as string) || 'all');
@@ -34,7 +36,7 @@ export default function Catalog() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.title}>Products</Text>
+        <Text style={styles.title}>{t('products')}</Text>
         <TouchableOpacity testID="catalog-cart" onPress={() => router.push('/cart')}>
           <Ionicons name="cart-outline" size={26} color={theme.colors.textPrimary} />
         </TouchableOpacity>
@@ -44,7 +46,7 @@ export default function Catalog() {
         <Ionicons name="search" size={18} color={theme.colors.textSecondary} />
         <TextInput
           testID="search-input"
-          placeholder="Search tillers, harrows..."
+          placeholder={t('search_placeholder')}
           placeholderTextColor={theme.colors.textMuted}
           value={q}
           onChangeText={setQ}
@@ -56,7 +58,7 @@ export default function Catalog() {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 44 }} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
         {['all', ...categories].map(c => (
           <TouchableOpacity key={c} testID={`chip-${c}`} onPress={() => setActive(c)} style={[styles.chip, active === c && styles.chipActive]}>
-            <Text style={[styles.chipTxt, active === c && styles.chipTxtActive]}>{c === 'all' ? 'All' : c}</Text>
+            <Text style={[styles.chipTxt, active === c && styles.chipTxtActive]}>{c === 'all' ? t('all') : c}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -71,7 +73,7 @@ export default function Catalog() {
           contentContainerStyle={{ padding: 12, paddingBottom: 40 }}
           columnWrapperStyle={{ gap: 12 }}
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-          ListEmptyComponent={<Text style={{ textAlign: 'center', color: theme.colors.textMuted, marginTop: 40 }}>No products found</Text>}
+          ListEmptyComponent={<Text style={{ textAlign: 'center', color: theme.colors.textMuted, marginTop: 40 }}>{t('no_products')}</Text>}
           renderItem={({ item }) => (
             <TouchableOpacity testID={`product-${item.id}`} style={styles.card} onPress={() => router.push(`/product/${item.id}`)}>
               <Image source={{ uri: item.image }} style={styles.cardImg} />

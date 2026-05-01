@@ -6,6 +6,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { api } from '../../src/api';
 import { useAuth } from '../../src/AuthContext';
 import { useCart } from '../../src/CartContext';
+import { useI18n } from '../../src/i18n';
+import { HansaLogo } from '../../src/components/HansaLogo';
 import { theme, formatINR } from '../../src/theme';
 
 const CAT_ICONS: Record<string, any> = {
@@ -18,6 +20,7 @@ export default function Home() {
   const router = useRouter();
   const { user } = useAuth();
   const { count } = useCart();
+  const { t } = useI18n();
   const [featured, setFeatured] = useState<any[]>([]);
   const [news, setNews] = useState<any[]>([]);
   const [offers, setOffers] = useState<any[]>([]);
@@ -57,9 +60,12 @@ export default function Home() {
       <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />} showsVerticalScrollIndicator={false} testID="home-scroll">
         {/* Header */}
         <View style={styles.header}>
-          <View>
-            <Text style={styles.hello}>Namaste {user?.name?.split(' ')[0] || 'Farmer'}</Text>
-            <Text style={styles.sub}>What will you harvest today?</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+            <HansaLogo size={44} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.hello}>{t('namaste')} {user?.name?.split(' ')[0] || 'Farmer'}</Text>
+              <Text style={styles.sub}>{t('what_harvest')}</Text>
+            </View>
           </View>
           <TouchableOpacity testID="cart-icon" onPress={() => router.push('/cart')} style={styles.cartBtn}>
             <Ionicons name="cart-outline" size={26} color={theme.colors.textPrimary} />
@@ -72,8 +78,8 @@ export default function Home() {
           <TouchableOpacity testID="warranty-alert" onPress={() => router.push('/(tabs)/warranty')} style={styles.warnBanner}>
             <Ionicons name="warning" size={20} color="#fff" />
             <View style={{ flex: 1 }}>
-              <Text style={styles.warnTitle}>Warranty expiring soon</Text>
-              <Text style={styles.warnSub}>{expiringWarranty.product_name} · {expiringWarranty.days_left} days left</Text>
+              <Text style={styles.warnTitle}>{t('warranty_expiring')}</Text>
+              <Text style={styles.warnSub}>{expiringWarranty.product_name} · {expiringWarranty.days_left} {t('days_left')}</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#fff" />
           </TouchableOpacity>
@@ -86,10 +92,10 @@ export default function Home() {
           imageStyle={{ borderRadius: 20 }}
         >
           <View style={styles.heroOverlay}>
-            <Text style={styles.heroTag}>OUR CULTURE IS AGRICULTURE</Text>
+            <Text style={styles.heroTag}>{t('tagline')}</Text>
             <Text style={styles.heroTitle}>Energizing the Future of Farming</Text>
             <TouchableOpacity testID="hero-shop" style={styles.heroBtn} onPress={() => router.push('/(tabs)/catalog')}>
-              <Text style={styles.heroBtnTxt}>Shop Now</Text>
+              <Text style={styles.heroBtnTxt}>{t('shop_now')}</Text>
               <Ionicons name="arrow-forward" size={16} color="#fff" />
             </TouchableOpacity>
           </View>
@@ -97,8 +103,8 @@ export default function Home() {
 
         {/* Offers banner */}
         <View style={styles.sectionRow}>
-          <Text style={styles.sectionTitle}>Active Offers</Text>
-          <TouchableOpacity testID="see-all-offers" onPress={() => router.push('/offers')}><Text style={styles.link}>View all</Text></TouchableOpacity>
+          <Text style={styles.sectionTitle}>{t('active_offers')}</Text>
+          <TouchableOpacity testID="see-all-offers" onPress={() => router.push('/offers')}><Text style={styles.link}>{t('view_all')}</Text></TouchableOpacity>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}>
           {offers.map(o => (
@@ -111,7 +117,7 @@ export default function Home() {
         </ScrollView>
 
         {/* Categories */}
-        <Text style={[styles.sectionTitle, { paddingHorizontal: 16, marginTop: 24 }]}>Shop by Category</Text>
+        <Text style={[styles.sectionTitle, { paddingHorizontal: 16, marginTop: 24 }]}>{t('shop_by_cat')}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 12, paddingVertical: 12 }}>
           {categories.map(c => (
             <TouchableOpacity key={c} testID={`cat-${c}`} style={styles.catChip} onPress={() => router.push({ pathname: '/(tabs)/catalog', params: { category: c } })}>
@@ -123,8 +129,8 @@ export default function Home() {
 
         {/* Featured */}
         <View style={styles.sectionRow}>
-          <Text style={styles.sectionTitle}>Featured Products</Text>
-          <TouchableOpacity testID="see-all-featured" onPress={() => router.push('/(tabs)/catalog')}><Text style={styles.link}>View all</Text></TouchableOpacity>
+          <Text style={styles.sectionTitle}>{t('featured_products')}</Text>
+          <TouchableOpacity testID="see-all-featured" onPress={() => router.push('/(tabs)/catalog')}><Text style={styles.link}>{t('view_all')}</Text></TouchableOpacity>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}>
           {featured.map(p => (
@@ -141,8 +147,8 @@ export default function Home() {
 
         {/* News */}
         <View style={styles.sectionRow}>
-          <Text style={styles.sectionTitle}>Latest Updates</Text>
-          <TouchableOpacity testID="see-all-news" onPress={() => router.push('/news')}><Text style={styles.link}>View all</Text></TouchableOpacity>
+          <Text style={styles.sectionTitle}>{t('latest_updates')}</Text>
+          <TouchableOpacity testID="see-all-news" onPress={() => router.push('/news')}><Text style={styles.link}>{t('view_all')}</Text></TouchableOpacity>
         </View>
         <View style={{ paddingHorizontal: 16, gap: 12, marginBottom: 24 }}>
           {news.slice(0, 3).map(n => (
@@ -161,15 +167,15 @@ export default function Home() {
         <View style={styles.quickRow}>
           <TouchableOpacity testID="quick-warranty" style={styles.quickCard} onPress={() => router.push('/(tabs)/warranty')}>
             <Ionicons name="shield-checkmark" size={24} color={theme.colors.secondary} />
-            <Text style={styles.quickTxt}>Warranty</Text>
+            <Text style={styles.quickTxt}>{t('warranty')}</Text>
           </TouchableOpacity>
           <TouchableOpacity testID="quick-dealer" style={styles.quickCard} onPress={() => router.push('/dealers')}>
             <Ionicons name="location" size={24} color={theme.colors.earth} />
-            <Text style={styles.quickTxt}>Dealers</Text>
+            <Text style={styles.quickTxt}>{t('dealers')}</Text>
           </TouchableOpacity>
           <TouchableOpacity testID="quick-support" style={styles.quickCard} onPress={() => router.push('/support')}>
             <Ionicons name="headset" size={24} color={theme.colors.primary} />
-            <Text style={styles.quickTxt}>Support</Text>
+            <Text style={styles.quickTxt}>{t('support')}</Text>
           </TouchableOpacity>
         </View>
         <View style={{ height: 40 }} />

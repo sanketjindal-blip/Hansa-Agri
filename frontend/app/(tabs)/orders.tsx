@@ -4,10 +4,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../../src/api';
+import { useI18n } from '../../src/i18n';
 import { theme, formatINR } from '../../src/theme';
 
 export default function Orders() {
   const router = useRouter();
+  const { t } = useI18n();
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -24,8 +26,8 @@ export default function Orders() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.title}>My Purchases</Text>
-        <Text style={styles.sub}>Track your orders and past purchases</Text>
+        <Text style={styles.title}>{t('my_purchases')}</Text>
+        <Text style={styles.sub}>{t('track_sub')}</Text>
       </View>
       {loading ? (
         <ActivityIndicator color={theme.colors.primary} style={{ marginTop: 40 }} />
@@ -38,9 +40,9 @@ export default function Orders() {
           ListEmptyComponent={
             <View style={styles.empty}>
               <Ionicons name="receipt-outline" size={60} color={theme.colors.textMuted} />
-              <Text style={styles.emptyTitle}>No orders yet</Text>
+              <Text style={styles.emptyTitle}>{t('no_orders')}</Text>
               <TouchableOpacity testID="orders-shop" onPress={() => router.push('/(tabs)/catalog')} style={styles.shopBtn}>
-                <Text style={styles.shopTxt}>Start Shopping</Text>
+                <Text style={styles.shopTxt}>{t('start_shopping')}</Text>
               </TouchableOpacity>
             </View>
           }
@@ -68,12 +70,12 @@ export default function Orders() {
                 </View>
               ))}
               <View style={styles.totalRow}>
-                <Text style={styles.totalLbl}>Total</Text>
+                <Text style={styles.totalLbl}>{t('total')}</Text>
                 <Text style={styles.totalVal}>{formatINR(item.total)}</Text>
               </View>
               <TouchableOpacity style={styles.warrantyLink} onPress={() => router.push('/(tabs)/warranty')}>
                 <Ionicons name="shield-checkmark-outline" size={16} color={theme.colors.secondary} />
-                <Text style={styles.warrantyTxt}>View Warranty</Text>
+                <Text style={styles.warrantyTxt}>{t('view_warranty')}</Text>
               </TouchableOpacity>
             </View>
           )}

@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field, EmailStr
 
 from seed_data import SEED_PRODUCTS, SEED_NEWS, SEED_OFFERS, SEED_CUSTOMER_ORDERS
 from dealers_data import DEALERS
+from sms import send_sms
 
 try:
     import razorpay  # optional - works only if keys are provided
@@ -325,6 +326,17 @@ async def checkout(body: CheckoutIn, user=Depends(get_current_user)):
     }
     await db.orders.insert_one(order)
     order.pop("_id", None)
+    # Send SMS on order placement (non-blocking, best-effort)
+    try:
+        msg = (
+            f"HANSA: Order #{order['order_number']} confirmed. "
+            f"Total Rs.{int(order['total'])}. "
+            f"Items: {len(order_items)}. "
+            f"Track in app. Support: +91 9045 333 332"
+        )
+        send_sms(body.phone, msg)
+    except Exception:
+        pass
     return order
 
 
@@ -459,6 +471,40 @@ async def admin_delete_product(product_id: str, user=Depends(require_admin)):
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Product not found")
     return {"deleted": True}
+
+
+@api.patch("/admin/products/{product_id}")
+async def admin_update_product(product_id: str, body: AdminProductIn, user=Depends(require_admin)):
+    update = body.dict()
+    update["mrp"] = round(update["price"] * 1.15)
+    update["images"] = [update["image"]]
+    res = await db.products.update_one({"id": product_id}, {"$set": update})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Product not found")
+    p = await db.products.find_one({"id": product_id}, {"_id": 0})
+    return p
+
+
+@api.post("/admin/warranty-reminders")
+async def admin_send_warranty_reminders(user=Depends(require_admin)):
+    """Send SMS to all users whose warranty expires within 45 days."""
+    orders = await db.orders.find({}, {"_id": 0}).to_list(1000)
+    sent = 0
+    now = datetime.now(timezone.utc)
+    for o in orders:
+        purchase = datetime.fromisoformat(o["purchase_date"])
+        for item in o["items"]:
+            wm = int(item.get("warranty_months", 12))
+            expiry = purchase + timedelta(days=wm * 30)
+            days_left = (expiry - now).days
+            if 0 < days_left <= 45:
+                phone = o.get("shipping", {}).get("phone", "")
+                if phone:
+                    msg = f"HANSA: Your warranty for {item['name']} expires in {days_left} days. Extend or raise service via the app."
+                    r = send_sms(phone, msg)
+                    if r.get("ok"):
+                        sent += 1
+    return {"sent": sent}
 
 
 @api.post("/admin/news")
