@@ -1,0 +1,101 @@
+{
+  "theme_and_archetype": {
+    "domain": "Agriculture & Machinery E-commerce",
+    "theme": "Light",
+    "archetype": "Archetype 1 (Organic & Earthy)",
+    "mood": "Grounded, reliable, energetic, and professional. Tailored for farmers and agri-business owners in India. The design must feel field-ready, high-contrast for outdoor sunlight readability, and trustworthy."
+  },
+  "colors": {
+    "primary": "#FF6600",
+    "primary_description": "RKAI Orange - Used for primary CTAs (Buy Now, Add to Cart), alerts, and highlighting key features.",
+    "secondary": "#2E7D32",
+    "secondary_description": "Agriculture Green - Used for secondary buttons, success states, and emphasizing growth/trust.",
+    "background": "#F9FAFB",
+    "surface": "#FFFFFF",
+    "text_primary": "#111827",
+    "text_secondary": "#4B5563",
+    "border": "#E5E7EB",
+    "accent_earth": "#8B4513"
+  },
+  "typography": {
+    "heading_font": "Outfit",
+    "body_font": "Manrope",
+    "scale": {
+      "h1": "text-4xl tracking-tight font-bold",
+      "h2": "text-3xl tracking-tight font-bold",
+      "h3": "text-2xl font-semibold",
+      "h4": "text-xl font-semibold",
+      "body": "text-base font-normal leading-relaxed",
+      "small": "text-sm text-gray-500 font-medium"
+    },
+    "instructions": "Use Outfit for all app headers, screen titles, and prominent product names. Use Manrope for product descriptions, specifications, and data fields."
+  },
+  "spacing_and_layout": {
+    "grid_system": "React Native Flexbox. Use 2-column FlatList for product catalogs. Use horizontal ScrollViews for featured items and news.",
+    "padding": "Generous spacing. Screen containers should have p-4 or p-6. Cards should have internal p-4.",
+    "radius": "Use rounded-2xl for main cards and product images. Use rounded-full for primary action buttons to make them easily tappable on mobile.",
+    "shadows": "Use subtle elevations: shadow-sm for lists, shadow-md for floating buttons or highlighted cards."
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#FF6600] text-white font-bold rounded-full py-4 px-6 text-center items-center justify-center flex-row shadow-md",
+      "secondary": "bg-[#2E7D32] text-white font-bold rounded-full py-4 px-6 text-center items-center justify-center flex-row",
+      "outline": "border-2 border-[#FF6600] text-[#FF6600] font-bold rounded-full py-4 px-6 text-center items-center justify-center flex-row"
+    },
+    "cards": {
+      "product_card": "bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 mb-4",
+      "news_card": "bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex-row items-center space-x-4",
+      "dashboard_widget": "bg-white rounded-2xl p-4 shadow-sm border-l-4 border-[#2E7D32]"
+    },
+    "inputs": {
+      "text_field": "bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-base text-gray-900 focus:border-[#FF6600]"
+    }
+  },
+  "key_screens": {
+    "splash_login": "Full screen earthy/farm background image with a dark gradient overlay (bg-black/40). White RKAI logo in center. 'OUR CULTURE IS AGRICULTURE' in white Outfit font. Bright orange Login button.",
+    "home_dashboard": "Header with greeting and cart icon. Hero Swiper/Carousel showcasing latest tractor implements with orange/green banners. 'Quick Categories' (Tiller, Harrow, etc.) as circular icons in a horizontal scrolling list. 'Featured Products' horizontal cards. 'Latest News' stack at bottom.",
+    "product_catalog": "2-column grid layout (FlatList numColumns=2). Each item has a square image, title, bold price, and a small '+' icon button in green.",
+    "product_detail": "Full-width image carousel at top. Title, Price, Ratings. Expandable accordion (or simple lists) for Specifications Table and Key Features. Sticky bottom bar with 'Add to Cart' and 'Buy Now'.",
+    "warranty_tracker": "List of purchased items. Selecting one shows a circular progress or thick horizontal progress bar indicating remaining warranty days (Green for active, Red for expired). Includes a 'Claim Warranty' button.",
+    "cart_checkout": "Clean list of cart items with increment/decrement steppers. Address form using standardized inputs. Checkout summary with a high-contrast Orange 'Confirm Payment' button.",
+    "service_support": "Simple form for raising tickets. Includes a camera icon button to attach photos of the broken machinery."
+  },
+  "accessibility_and_testing": {
+    "testing_attributes": "All interactive elements MUST include a testID attribute in React Native (e.g., testID='login-submit-button').",
+    "contrast": "Text over images must use gradient overlays or textShadow properties in React Native to ensure readability in bright sunlight.",
+    "touch_targets": "All tappable elements (buttons, links, icons) must be at least 44x44 points for ease of use in the field."
+  },
+  "image_urls": {
+    "hero_tractor_sunset": {
+      "url": "https://images.unsplash.com/photo-1745850783543-a29c3f3869ee?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDF8MHwxfHNlYXJjaHwxfHxpbmRpYW4lMjBmYXJtZXIlMjBkcml2aW5nJTIwdHJhY3RvciUyMGZpZWxkJTIwc3Vubnl8ZW58MHx8fHwxNzc3NjI2ODg4fDA&ixlib=rb-4.1.0&q=85",
+      "description": "Indian farmer driving a tractor at sunset",
+      "usage": "Splash screen background, or main hero carousel on dashboard."
+    },
+    "farmers_on_tractor": {
+      "url": "https://images.unsplash.com/photo-1575015592069-453a1f1b814a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDF8MHwxfHNlYXJjaHwyfHxpbmRpYW4lMjBmYXJtZXIlMjBkcml2aW5nJTIwdHJhY3RvciUyMGZpZWxkJTIwc3Vubnl8ZW58MHx8fHwxNzc3NjI2ODg4fDA&ixlib=rb-4.1.0&q=85",
+      "description": "Two men riding on a tractor in the field",
+      "usage": "About Us or Community/News section banner."
+    },
+    "heavy_machinery_1": {
+      "url": "https://images.unsplash.com/photo-1765921383366-0c895f6cb54f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHwzfHxoZWF2eSUyMGFncmljdWx0dXJhbCUyMG1hY2hpbmVyeSUyMHRyYWN0b3IlMjBpbXBsZW1lbnRzfGVufDB8fHx8MTc3NzYyNjg4OHww&ixlib=rb-4.1.0&q=85",
+      "description": "Red tractor parked in a clearing",
+      "usage": "Placeholder for Product Detail image (e.g., Harrow or Tiller context shot)."
+    },
+    "abstract_brand_texture": {
+      "url": "https://images.unsplash.com/photo-1707134657501-fbae0098f6e5?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzR8MHwxfHNlYXJjaHwyfHxvcmFuZ2UlMjBncmVlbiUyMGFic3RyYWN0JTIwdGV4dHVyZXxlbnwwfHx8fDE3Nzc2MjY5MDd8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Abstract painting with orange and green colors",
+      "usage": "Offers & Discounts background texture to add brand flavor."
+    }
+  },
+  "instructions_to_main_agent": [
+    "Since this is a React Native Expo application, strictly use React Native primitives (View, Text, TouchableOpacity, ScrollView, FlatList, Image).",
+    "Use NativeWind for styling. Map the Tailwind utility classes provided in the components section to the className props.",
+    "Do not use HTML elements like div, span, or web-only CSS properties.",
+    "Implement navigation using React Navigation (@react-navigation/native and @react-navigation/native-stack).",
+    "For icons, use @expo/vector-icons (Lucide, Feather, or MaterialCommunityIcons) which is built into Expo.",
+    "Ensure the app is fully accessible on mobile (touch targets >= 44px) and includes 'testID' (the React Native equivalent of data-testid) on all interactive elements.",
+    "Use a SafeAreaView to wrap the main screen contents to avoid notch overlapping.",
+    "Keep layouts field-ready: high contrast, big text, and avoid excessive transparent overlays that wash out in sunlight.",
+    "For the Warranty tracker progress bar, you can build a custom layout using nested Views with varying background colors and width percentages."
+  ]
+}
