@@ -19,6 +19,7 @@ export default function Profile() {
     { icon: 'pricetag-outline', label: t('offers_discounts'), onPress: () => router.push('/offers') },
     { icon: 'newspaper-outline', label: t('news_updates'), onPress: () => router.push('/news') },
     { icon: 'location-outline', label: t('find_dealer'), onPress: () => router.push('/dealers') },
+    { icon: 'share-social-outline', label: 'Follow us (Facebook, Instagram, YouTube)', onPress: () => router.push('/social') },
     { icon: 'headset-outline', label: t('support_service'), onPress: () => router.push('/support') },
     ...(user?.role === 'admin' ? [
       { icon: 'construct-outline', label: t('admin_dashboard'), onPress: () => router.push('/admin') },

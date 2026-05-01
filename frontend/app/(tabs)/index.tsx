@@ -173,6 +173,10 @@ export default function Home() {
             <Ionicons name="location" size={24} color={theme.colors.earth} />
             <Text style={styles.quickTxt}>{t('dealers')}</Text>
           </TouchableOpacity>
+          <TouchableOpacity testID="quick-social" style={styles.quickCard} onPress={() => router.push('/social')}>
+            <Ionicons name="logo-youtube" size={24} color="#FF0000" />
+            <Text style={styles.quickTxt}>Social</Text>
+          </TouchableOpacity>
           <TouchableOpacity testID="quick-support" style={styles.quickCard} onPress={() => router.push('/support')}>
             <Ionicons name="headset" size={24} color={theme.colors.primary} />
             <Text style={styles.quickTxt}>{t('support')}</Text>

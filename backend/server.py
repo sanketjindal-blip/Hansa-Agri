@@ -417,6 +417,50 @@ async def list_dealers():
     return DEALERS
 
 
+SOCIAL = {
+    "facebook": "https://www.facebook.com/share/14abV8caEJo/?mibextid=wwXIfr",
+    "instagram": "https://www.instagram.com/ramkishanagri_innovate?igsh=MTY4cnB0c2M5eHR4Zg%3D%3D&utm_source=qr",
+    "youtube": "https://youtube.com/@ramkishanagri_innovate",
+    "youtube_channel_id": "UCzfzCnxvo7nz4UkQolSqijA",
+    "youtube_handle": "@ramkishanagri_innovate",
+}
+
+
+@api.get("/social")
+async def get_social():
+    return SOCIAL
+
+
+@api.get("/social/youtube")
+async def youtube_latest():
+    """Fetch latest videos from HANSA YouTube channel via public RSS feed."""
+    import urllib.request
+    import xml.etree.ElementTree as ET
+    try:
+        url = f"https://www.youtube.com/feeds/videos.xml?channel_id={SOCIAL['youtube_channel_id']}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        raw = urllib.request.urlopen(req, timeout=8).read()
+        root = ET.fromstring(raw)
+        ns = {"a": "http://www.w3.org/2005/Atom", "m": "http://search.yahoo.com/mrss/"}
+        videos = []
+        for e in root.findall("a:entry", ns)[:12]:
+            vid = e.find("{http://www.youtube.com/xml/schemas/2015}videoId")
+            title = e.find("a:title", ns)
+            link = e.find("a:link", ns)
+            published = e.find("a:published", ns)
+            thumb = e.find("m:group/m:thumbnail", ns)
+            videos.append({
+                "video_id": vid.text if vid is not None else "",
+                "title": title.text if title is not None else "",
+                "url": link.attrib.get("href") if link is not None else "",
+                "published_at": published.text if published is not None else "",
+                "thumbnail": thumb.attrib.get("url") if thumb is not None else "",
+            })
+        return {"channel": "Ramkishan Agri Innovate Pvt. ltd.", "videos": videos}
+    except Exception as e:
+        return {"channel": "HANSA", "videos": [], "error": str(e)}
+
+
 # ---------------- Razorpay (optional - keys required) ----------------
 @api.get("/payments/config")
 async def payment_config():
@@ -568,7 +612,7 @@ async def seed_demo_customer():
             "id": uid,
             "email": email,
             "name": "Ramesh Kumar",
-            "phone": "+919876543210",
+            "phone": "+919045666666",
             "role": "customer",
             "password_hash": hash_password("farmer123"),
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -607,7 +651,7 @@ async def seed_demo_customer():
                 "payment_method": "cod",
                 "shipping": {
                     "full_name": "Ramesh Kumar",
-                    "phone": "+919876543210",
+                    "phone": "+919045666666",
                     "address": "Village Arifpur, Kithore Hapur Road",
                     "city": "Hapur",
                     "state": "Uttar Pradesh",
