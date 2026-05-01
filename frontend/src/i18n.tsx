@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { storage } from './storage';
 
 export type Lang = 'en' | 'hi';
 
@@ -121,14 +121,14 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>('en');
 
   useEffect(() => {
-    AsyncStorage.getItem('rkai_lang').then((v) => {
+    storage.getItem('rkai_lang').then((v) => {
       if (v === 'en' || v === 'hi') setLangState(v);
-    });
+    }).catch(() => {});
   }, []);
 
   const setLang = useCallback((l: Lang) => {
     setLangState(l);
-    AsyncStorage.setItem('rkai_lang', l).catch(() => {});
+    storage.setItem('rkai_lang', l).catch(() => {});
   }, []);
 
   const t = useCallback((k: string) => {

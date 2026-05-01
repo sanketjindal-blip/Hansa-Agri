@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, ImageBackground } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../src/AuthContext';
 import { useI18n } from '../src/i18n';
@@ -13,20 +13,18 @@ export default function Index() {
 
   useEffect(() => {
     if (!loading) {
-      const t = setTimeout(() => {
+      const timer = setTimeout(() => {
         if (user) router.replace('/(tabs)');
         else router.replace('/(auth)/login');
-      }, 700);
-      return () => clearTimeout(t);
+      }, 800);
+      return () => clearTimeout(timer);
     }
   }, [loading, user, router]);
 
   return (
-    <ImageBackground
-      source={{ uri: 'https://images.unsplash.com/photo-1745850783543-a29c3f3869ee?crop=entropy&cs=srgb&fm=jpg&w=1200&q=80' }}
-      style={styles.bg}
-      testID="splash-screen"
-    >
+    <View style={styles.bg} testID="splash-screen">
+      <View style={styles.topGreen} />
+      <View style={styles.bottomEarth} />
       <View style={styles.overlay}>
         <View style={styles.logoWrap}>
           <HansaLogo size={140} />
@@ -35,14 +33,16 @@ export default function Index() {
         <Text style={styles.tagline}>{t('tagline')}</Text>
         <ActivityIndicator color="#fff" style={{ marginTop: 32 }} />
       </View>
-    </ImageBackground>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  bg: { flex: 1 },
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', padding: 24 },
-  logoWrap: { backgroundColor: '#FFFBEA', padding: 10, borderRadius: 24, marginBottom: 24 },
-  title: { color: '#fff', fontSize: 32, fontWeight: '800', letterSpacing: 2, textAlign: 'center' },
-  tagline: { color: '#FFD9B8', fontSize: 13, marginTop: 8, fontWeight: '600', textAlign: 'center' },
+  bg: { flex: 1, backgroundColor: theme.colors.secondary },
+  topGreen: { position: 'absolute', top: 0, left: 0, right: 0, height: '55%', backgroundColor: theme.colors.secondaryDark },
+  bottomEarth: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '45%', backgroundColor: theme.colors.earth },
+  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
+  logoWrap: { backgroundColor: '#FFFBEA', padding: 14, borderRadius: 28, marginBottom: 24 },
+  title: { color: '#fff', fontSize: 36, fontWeight: '900', letterSpacing: 3, textAlign: 'center' },
+  tagline: { color: '#FFD9B8', fontSize: 13, marginTop: 10, fontWeight: '700', textAlign: 'center', letterSpacing: 2 },
 });

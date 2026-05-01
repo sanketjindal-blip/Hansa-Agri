@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, ReactNode } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { storage } from './storage';
 
 export type CartItem = {
   product_id: string;
@@ -31,7 +31,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
+        const raw = await storage.getItem(STORAGE_KEY);
         if (raw) setItems(JSON.parse(raw));
       } catch {}
       setHydrated(true);
@@ -41,7 +41,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   // persist on change
   useEffect(() => {
     if (!hydrated) return;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items)).catch(() => {});
+    storage.setItem(STORAGE_KEY, JSON.stringify(items)).catch(() => {});
   }, [items, hydrated]);
 
   const add = useCallback((item: Omit<CartItem, 'quantity'>, qty = 1) => {

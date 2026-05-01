@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { storage } from './storage';
 import { api, formatApiError } from './api';
 
 export type User = {
@@ -15,6 +15,8 @@ type AuthCtx = {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string, phone?: string) => Promise<void>;
+  sendOtp: (phone: string) => Promise<void>;
+  verifyOtp: (phone: string, otp: string, name?: string) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -26,13 +28,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     (async () => {
-      const token = await AsyncStorage.getItem('rkai_token');
+      const token = await storage.getItem('rkai_token');
       if (token) {
         try {
           const res = await api.get('/auth/me');
           setUser(res.data);
         } catch {
-          await AsyncStorage.removeItem('rkai_token');
+          await storage.removeItem('rkai_token');
         }
       }
       setLoading(false);
@@ -42,7 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     try {
       const res = await api.post('/auth/login', { email, password });
-      await AsyncStorage.setItem('rkai_token', res.data.access_token);
+      await storage.setItem('rkai_token', res.data.access_token);
       setUser(res.data.user);
     } catch (e) {
       throw new Error(formatApiError(e));
@@ -52,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = useCallback(async (email: string, password: string, name: string, phone?: string) => {
     try {
       const res = await api.post('/auth/register', { email, password, name, phone });
-      await AsyncStorage.setItem('rkai_token', res.data.access_token);
+      await storage.setItem('rkai_token', res.data.access_token);
       setUser(res.data.user);
     } catch (e) {
       throw new Error(formatApiError(e));
@@ -60,11 +62,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    await AsyncStorage.removeItem('rkai_token');
+    await storage.removeItem('rkai_token');
     setUser(null);
   }, []);
 
-  return <Ctx.Provider value={{ user, loading, login, register, logout }}>{children}</Ctx.Provider>;
+  const sendOtp = useCallback(async (phone: string) => {
+    try {
+      await api.post('/auth/send-otp', { phone });
+    } catch (e) { throw new Error(formatApiError(e)); }
+  }, []);
+
+  const verifyOtp = useCallback(async (phone: string, otp: string, name?: string) => {
+    try {
+      const res = await api.post('/auth/verify-otp', { phone, otp, name });
+      await storage.setItem('rkai_token', res.data.access_token);
+      setUser(res.data.user);
+    } catch (e) { throw new Error(formatApiError(e)); }
+  }, []);
+
+  return <Ctx.Provider value={{ user, loading, login, register, sendOtp, verifyOtp, logout }}>{children}</Ctx.Provider>;
 }
 
 export function useAuth() {

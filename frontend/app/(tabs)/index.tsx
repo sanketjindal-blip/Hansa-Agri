@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, RefreshControl, ActivityIndicator, ImageBackground } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,6 +25,7 @@ export default function Home() {
   const [news, setNews] = useState<any[]>([]);
   const [offers, setOffers] = useState<any[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
+  const [expiringWarranty, setExpiringWarranty] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -40,6 +41,11 @@ export default function Home() {
       setNews(n.data);
       setOffers(o.data);
       setCategories(c.data);
+      try {
+        const w = await api.get('/warranties');
+        const soon = (w.data || []).find((item: any) => item.status === 'active' && item.days_left <= 60);
+        setExpiringWarranty(soon || null);
+      } catch { /* not logged in */ }
     } catch (e) {
       console.log('home load error', e);
     } finally {
@@ -86,11 +92,12 @@ export default function Home() {
         )}
 
         {/* Hero */}
-        <ImageBackground
-          source={{ uri: 'https://images.unsplash.com/photo-1745850783543-a29c3f3869ee?crop=entropy&cs=srgb&fm=jpg&w=1000&q=80' }}
-          style={styles.hero}
-          imageStyle={{ borderRadius: 20 }}
-        >
+        <View style={styles.hero}>
+          <Image
+            source={require('../../assets/images/hansa-poster.jpeg')}
+            style={styles.heroImg}
+            resizeMode="cover"
+          />
           <View style={styles.heroOverlay}>
             <Text style={styles.heroTag}>{t('tagline')}</Text>
             <Text style={styles.heroTitle}>Energizing the Future of Farming</Text>
@@ -99,7 +106,7 @@ export default function Home() {
               <Ionicons name="arrow-forward" size={16} color="#fff" />
             </TouchableOpacity>
           </View>
-        </ImageBackground>
+        </View>
 
         {/* Offers banner */}
         <View style={styles.sectionRow}>
@@ -196,8 +203,9 @@ const styles = StyleSheet.create({
   cartBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: theme.colors.border },
   badge: { position: 'absolute', top: -2, right: -2, backgroundColor: theme.colors.primary, borderRadius: 999, minWidth: 18, height: 18, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center' },
   badgeTxt: { color: '#fff', fontSize: 10, fontWeight: '800' },
-  hero: { height: 180, marginHorizontal: 16, borderRadius: 20, overflow: 'hidden', marginTop: 8 },
-  heroOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', padding: 20, justifyContent: 'flex-end', borderRadius: 20 },
+  hero: { height: 200, marginHorizontal: 16, borderRadius: 20, overflow: 'hidden', marginTop: 8, backgroundColor: '#000' },
+  heroImg: { position: 'absolute', width: '100%', height: '160%', top: '-35%', left: 0 },
+  heroOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', padding: 20, justifyContent: 'flex-end' },
   heroTag: { color: '#FFD9B8', letterSpacing: 2, fontSize: 10, fontWeight: '700' },
   heroTitle: { color: '#fff', fontSize: 22, fontWeight: '800', marginTop: 4 },
   heroBtn: { flexDirection: 'row', alignSelf: 'flex-start', backgroundColor: theme.colors.primary, borderRadius: 999, paddingHorizontal: 16, paddingVertical: 10, marginTop: 12, alignItems: 'center', gap: 6 },

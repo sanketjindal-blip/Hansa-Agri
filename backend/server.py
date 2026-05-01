@@ -108,6 +108,17 @@ class LoginIn(BaseModel):
     password: str
 
 
+class PhoneIn(BaseModel):
+    phone: str
+    name: Optional[str] = None
+
+
+class OtpVerifyIn(BaseModel):
+    phone: str
+    otp: str
+    name: Optional[str] = None
+
+
 class AuthOut(BaseModel):
     access_token: str
     user: dict
@@ -220,6 +231,73 @@ async def login(body: LoginIn):
 @api.get("/auth/me")
 async def me(user=Depends(get_current_user)):
     return user
+
+
+def _normalize_phone(p: str) -> str:
+    p = (p or "").strip().replace(" ", "").replace("-", "")
+    if not p:
+        return ""
+    if p.startswith("+"):
+        return p
+    digits = "".join(c for c in p if c.isdigit())
+    if len(digits) == 10:
+        return "+91" + digits
+    if digits.startswith("91") and len(digits) >= 12:
+        return "+" + digits
+    return "+" + digits
+
+
+import random
+
+
+@api.post("/auth/send-otp")
+async def send_otp(body: PhoneIn):
+    phone = _normalize_phone(body.phone)
+    if not phone or len(phone) < 12:
+        raise HTTPException(status_code=400, detail="Invalid phone number")
+    code = f"{random.randint(100000, 999999)}"
+    expires = datetime.now(timezone.utc) + timedelta(minutes=10)
+    await db.otps.update_one(
+        {"phone": phone},
+        {"$set": {"phone": phone, "code": code, "expires_at": expires.isoformat(), "attempts": 0}},
+        upsert=True,
+    )
+    msg = f"HANSA: Your login OTP is {code}. Valid for 10 minutes. Do not share."
+    result = send_sms(phone, msg)
+    return {"sent": result.get("ok", False), "phone": phone}
+
+
+@api.post("/auth/verify-otp", response_model=AuthOut)
+async def verify_otp(body: OtpVerifyIn):
+    phone = _normalize_phone(body.phone)
+    rec = await db.otps.find_one({"phone": phone})
+    if not rec:
+        raise HTTPException(status_code=400, detail="Request an OTP first")
+    if rec.get("attempts", 0) >= 5:
+        raise HTTPException(status_code=429, detail="Too many attempts. Request a new OTP.")
+    if datetime.fromisoformat(rec["expires_at"]) < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="OTP expired")
+    if body.otp.strip() != rec["code"]:
+        await db.otps.update_one({"phone": phone}, {"$inc": {"attempts": 1}})
+        raise HTTPException(status_code=400, detail="Invalid OTP")
+
+    user = await db.users.find_one({"phone": phone})
+    if not user:
+        user = {
+            "id": str(uuid.uuid4()),
+            "email": f"{phone.lstrip('+')}@phone.hansa",
+            "name": body.name or f"Farmer {phone[-4:]}",
+            "phone": phone,
+            "role": "customer",
+            "password_hash": hash_password(uuid.uuid4().hex),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.users.insert_one(user)
+    await db.otps.delete_one({"phone": phone})
+    token = create_access_token(user["id"], user["email"])
+    user.pop("password_hash", None)
+    user.pop("_id", None)
+    return {"access_token": token, "user": user}
 
 
 # ---------------- Products ----------------
