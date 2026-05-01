@@ -1,0 +1,133 @@
+"""Pydantic request/response schemas."""
+from typing import List, Optional
+from pydantic import BaseModel, Field, EmailStr
+
+
+class RegisterIn(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=6)
+    name: str
+    phone: Optional[str] = None
+
+
+class LoginIn(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class PhoneIn(BaseModel):
+    phone: str
+    name: Optional[str] = None
+
+
+class OtpVerifyIn(BaseModel):
+    phone: str
+    otp: str
+    name: Optional[str] = None
+
+
+class AuthOut(BaseModel):
+    access_token: str
+    user: dict
+
+
+class OrderItemIn(BaseModel):
+    product_id: str
+    quantity: int = 1
+
+
+class CheckoutIn(BaseModel):
+    items: List[OrderItemIn]
+    full_name: str
+    phone: str
+    address: str
+    city: str
+    state: str
+    pincode: str
+    payment_method: str = "cod"
+    promo_code: Optional[str] = None
+
+
+class SupportTicketIn(BaseModel):
+    subject: str
+    message: str
+    product_id: Optional[str] = None
+
+
+class RazorpayOrderIn(BaseModel):
+    amount_inr: float
+
+
+class RazorpayVerifyIn(BaseModel):
+    order_id: str
+    razorpay_payment_id: str
+    razorpay_order_id: str
+    razorpay_signature: str
+
+
+class AdminProductIn(BaseModel):
+    name: str
+    category: str
+    price: float
+    warranty_months: int = 12
+    description: str
+    image: str
+    features: List[str] = []
+    specifications: dict = {}
+    recommended_hp: str = ""
+    featured: bool = False
+
+
+class AdminNewsIn(BaseModel):
+    title: str
+    summary: str
+    body: str
+    image: str
+    tag: str = "Update"
+
+
+class AdminOfferIn(BaseModel):
+    code: str
+    title: str
+    description: str
+    discount_percent: int
+    banner_color: str = "#FF6600"
+    valid_until: str
+
+
+class DealerIn(BaseModel):
+    name: str
+    address: str
+    phone: str
+    whatsapp: str
+    state: str
+    type: str = "Authorised Dealer"
+
+
+class CompanyIn(BaseModel):
+    name: str
+    tagline: str
+    address: str
+    phone: str
+    phone_2: Optional[str] = ""
+    whatsapp: str
+    email: str
+    website: Optional[str] = ""
+
+
+class AssignWarrantyIn(BaseModel):
+    phone: str
+    product_id: str
+    quantity: int = 1
+    purchase_date: Optional[str] = None
+    customer_name: Optional[str] = None
+    address: Optional[str] = ""
+    city: Optional[str] = ""
+    state: Optional[str] = ""
+    pincode: Optional[str] = ""
+    bill_image_base64: Optional[str] = None
+
+
+class DealerLoginIn(BaseModel):
+    phone: str
+    dealer_id: str

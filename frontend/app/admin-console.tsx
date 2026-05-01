@@ -10,7 +10,7 @@ import { theme } from '../src/theme';
 export default function AdminConsole() {
   const router = useRouter();
   const { user } = useAuth();
-  const [tab, setTab] = useState<'dealers' | 'warranty' | 'company'>('dealers');
+  const [tab, setTab] = useState<'dealers' | 'promote' | 'warranty' | 'company'>('dealers');
 
   useEffect(() => {
     if (user?.role !== 'admin') {
@@ -26,14 +26,15 @@ export default function AdminConsole() {
         <View style={{ width: 24 }} />
       </View>
       <View style={styles.tabRow}>
-        {([['dealers', 'Dealers', 'location'], ['warranty', 'Warranty', 'shield'], ['company', 'Company', 'business']] as const).map(([k, lbl, ico]) => (
+        {([['dealers', 'Dealers', 'location'], ['promote', 'Promote', 'key'], ['warranty', 'Warranty', 'shield'], ['company', 'Company', 'business']] as const).map(([k, lbl, ico]) => (
           <TouchableOpacity key={k} testID={`tab-${k}`} onPress={() => setTab(k as any)} style={[styles.tab, tab === k && styles.tabActive]}>
-            <Ionicons name={ico as any} size={16} color={tab === k ? '#fff' : theme.colors.textSecondary} />
+            <Ionicons name={ico as any} size={14} color={tab === k ? '#fff' : theme.colors.textSecondary} />
             <Text style={[styles.tabTxt, tab === k && styles.tabTxtActive]}>{lbl}</Text>
           </TouchableOpacity>
         ))}
       </View>
       {tab === 'dealers' && <DealersTab />}
+      {tab === 'promote' && <PromoteTab />}
       {tab === 'warranty' && <WarrantyTab />}
       {tab === 'company' && <CompanyTab />}
     </SafeAreaView>
@@ -124,6 +125,47 @@ function DealersTab() {
         </SafeAreaView>
       </Modal>
     </View>
+  );
+}
+
+// ----------------- PROMOTE DEALER -----------------
+function PromoteTab() {
+  const [dealers, setDealers] = useState<any[]>([]);
+  const [phone, setPhone] = useState('+91');
+  const [dealerId, setDealerId] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => { api.get('/dealers').then(r => { setDealers(r.data); if (r.data[0]) setDealerId(r.data[0].id); }); }, []);
+
+  const submit = async () => {
+    if (!phone || !dealerId) return Alert.alert('Missing', 'Phone and dealer required');
+    setBusy(true);
+    try {
+      await api.post('/admin/promote-dealer', { phone, dealer_id: dealerId });
+      Alert.alert('Done', `${phone} is now a dealer. They can login with OTP and access Dealer Portal.`);
+      setPhone('+91');
+    } catch (e: any) { Alert.alert('Error', formatApiError(e)); } finally { setBusy(false); }
+  };
+
+  return (
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+        <Text style={styles.sectionLbl}>Link a mobile number to a dealer. When this person logs into the HANSA app with OTP on this number, they get the Dealer Portal with ability to register sales and upload bills.</Text>
+        <Text style={styles.field}>Dealer *</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4, marginBottom: 10 }}>
+          {dealers.map(d => (
+            <TouchableOpacity key={d.id} onPress={() => setDealerId(d.id)} style={[styles.chip, dealerId === d.id && styles.chipActive]}>
+              <Text style={[styles.chipTxt, dealerId === d.id && styles.chipTxtActive]} numberOfLines={1}>{d.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+        <Text style={styles.field}>Dealer Owner's Mobile *</Text>
+        <TextInput testID="pr-phone" placeholder="+919876543210" placeholderTextColor={theme.colors.textMuted} keyboardType="phone-pad" value={phone} onChangeText={setPhone} style={styles.input} />
+        <TouchableOpacity testID="pr-submit" onPress={submit} disabled={busy} style={styles.saveBtn}>
+          {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveTxt}>Promote to Dealer & Send SMS</Text>}
+        </TouchableOpacity>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
