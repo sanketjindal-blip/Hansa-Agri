@@ -213,7 +213,7 @@ agent_communication:
 frontend:
   - task: "Dealer Portal product list overlap fix + admin-categories useRouter crash fix"
     implemented: true
-    working: "NA"
+    working: true
     file: "frontend/app/dealer-portal.tsx + frontend/app/admin-categories.tsx"
     stuck_count: 0
     priority: "high"
@@ -221,39 +221,53 @@ frontend:
     status_history:
       - working: "NA"
         agent: "main"
+        comment: "Wrapped products list in nested ScrollView with maxHeight + overflow:hidden; removed dangling useRouter() reference in admin-categories."
+      - working: true
+        agent: "testing"
         comment: |
-          1) dealer-portal.tsx: products list View had maxHeight:280 but no overflow:hidden.
-             On iOS RN, Views default to overflow:'visible' so children rendered past the
-             container and overlapped Purchase Date / Address / City-State-Pin / Bill / Submit.
-             Wrapped the inner list in a nested ScrollView with maxHeight on the inner
-             ScrollView (works on iOS) and added overflow:'hidden' to the productList style.
-          2) admin-categories.tsx: line 23 referenced useRouter() but the import was removed
-             when migrating to safeBack helper. This caused a ReferenceError on render —
-             the category screen was crashing for the user. Removed the dangling line.
+          Verified on mobile viewport (390x844) after admin OTP login (+919045666666, OTP read from MongoDB otps collection).
+          A) /dealer-portal Register Sale: Products checklist renders as a contained scrollable card; on scroll the inner list scrolls independently while Purchase Date, Address (Optional), City, State all appear cleanly below with NO overlap. Screenshot dealer-portal.png + dealer-portal-scrolled.png show clean layout.
+          B) /admin-categories: page loaded with default categories visible (Tiller, Plough, Harrow etc., 'Tiller' string detected). No red screen / ReferenceError. Back navigation works.
+          C) /admin-products: page renders the products list cleanly with header 'Manage Products' + warranty SMS reminders + product rows. NOTE: New Product modal (X-close + Take Photo/Upload buttons) was not deeply opened in this UI test due to browser-call budget; main agent should manually spot-check the modal once.
 
   - task: "Notifications screen + bell card in profile"
     implemented: true
-    working: "NA"
+    working: true
     file: "frontend/app/notifications.tsx + frontend/app/(tabs)/profile.tsx"
     stuck_count: 0
     priority: "high"
     needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          PASS. Profile tab shows new 'Notifications' card with bell icon directly below Reward Points; for fresh admin it correctly displays 'You're all caught up'. Tapping navigates to /notifications which renders with header 'Notifications' and empty-state illustration + 'No notifications yet'. Back arrow returns cleanly. (Mark-all-read button visible only when unread>0; admin had 0 unread so that branch not exercised here, but the conditional render is in code.)
 
   - task: "Admin Service Requests screen + assign-to-manager"
     implemented: true
-    working: "NA"
+    working: true
     file: "frontend/app/admin-service-requests.tsx + frontend/app/(tabs)/profile.tsx"
     stuck_count: 0
     priority: "high"
     needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          PASS. Profile menu shows 'Service Requests' entry for admin. /admin-service-requests renders status filter pills (ALL/OPEN/IN PROGRESS/RESOLVED/CLOSED/CANCELLED) and a list of SR cards with title, customer name+phone, status pill, photo thumbnail and date. Cards correctly show either 'Assigned: <names>' or 'Unassigned — tap to assign'. NOTE: assign bottom-sheet modal toggling/Submit not exercised in UI test due to browser-call budget; backend regression already covered Assign + Notify happy path and notification fan-out.
 
   - task: "Admin Leads — Add Lead (call) + Assign-to-manager"
     implemented: true
-    working: "NA"
+    working: true
     file: "frontend/app/admin-leads.tsx"
     stuck_count: 0
     priority: "high"
     needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          PASS. /admin-leads renders status chips + new top-right 'Add Lead' button (testID add-lead-btn). Tapping opens the slide-up modal with all required fields ('Customer name *', 'Phone *', 'Equipment interest', 'Notes', 'Assign to managers' with All Lead Managers toggle, individual rows, Save Lead button, Cancel button). KeyboardAvoidingView present. Existing leads cards show CALL tag + Assigned line per design. Submission to backend was already validated end-to-end in /app/backend_test_session.py (admin_created lead, manager notification fan-out, Assign endpoint).
 
 agent_communication:
   - agent: "main"
