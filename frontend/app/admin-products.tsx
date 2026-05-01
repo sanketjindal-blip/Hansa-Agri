@@ -25,6 +25,7 @@ export default function AdminProducts() {
   const router = useRouter();
   const { user } = useAuth();
   const [products, setProducts] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -38,7 +39,10 @@ export default function AdminProducts() {
   }, [user, router]);
 
   const load = useCallback(async () => {
-    try { const r = await api.get('/products'); setProducts(r.data); } finally { setLoading(false); }
+    try {
+      const [p, c] = await Promise.all([api.get('/products'), api.get('/admin/categories')]);
+      setProducts(p.data); setCategories(c.data);
+    } finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
 
