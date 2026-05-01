@@ -200,3 +200,26 @@ class MultiAssignWarrantyIn(BaseModel):
     state: Optional[str] = ""
     pincode: Optional[str] = ""
     bill_image_base64: Optional[str] = None
+
+
+class AssignManagersIn(BaseModel):
+    """Body for assign-to-manager endpoints. If `all_managers` is True, the
+    item is broadcast to every active manager with the relevant permission and
+    `manager_ids` is ignored. If `all_managers` is False AND `manager_ids` is
+    empty, the assignment is cleared (no specific manager → visible to admins
+    only)."""
+    manager_ids: List[str] = []
+    all_managers: bool = False
+    note: Optional[str] = ""
+
+
+class AdminLeadIn(BaseModel):
+    """Admin-created lead (from a phone call / walk-in)."""
+    name: str
+    phone: str
+    equipment_interest: Optional[str] = ""
+    notes: Optional[str] = ""
+    source: Optional[str] = "call"  # call | walk_in | website | other
+    manager_ids: List[str] = []
+    all_managers: bool = False
+

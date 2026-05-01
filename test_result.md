@@ -163,12 +163,97 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Mobile-OTP-only Admin login (seed admin phones)"
-    - "Razorpay TEST keys live"
-    - "Lead referral & loyalty points system"
+    - "In-app notifications API"
+    - "Admin Service Request list + assign-to-manager"
+    - "Admin manual lead create + assign-to-manager"
+    - "Manager assignment-based filtering for leads & service-requests"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      New feature batch ready for backend regression. **Use admin token** for all admin endpoints,
+      and **manager phone-OTP login** is unavailable headlessly so manager filtering tests should
+      use the admin role (which is treated as a super-manager). Test credentials in /app/memory/test_credentials.md.
+
+      1) Notifications (auth users):
+         - GET /api/notifications -> {items:[], unread_count}
+         - GET /api/notifications/unread-count
+         - POST /api/notifications/mark-read {ids?: [...], all?: true}
+         Verify: cross-user isolation (one user cannot see another's), mark-read changes unread_count.
+
+      2) Admin Lead create + assign:
+         - POST /api/admin/leads {name, phone, equipment_interest, notes,
+           manager_ids: ["mgr-id"], all_managers: false} -> 200 with admin_created:true,
+           assigned_manager_ids matches body, source="call", referrer_user_id="" (so no
+           500-pt referral payout when later marked purchased — verify this!).
+         - POST same with all_managers:true -> all leads-permission managers receive
+           in-app notification. Verify notifications collection.
+         - POST /api/admin/leads/{id}/assign {manager_ids, all_managers} -> 200
+         - Negatives: missing name/phone -> 400; non-admin -> 403.
+
+      3) Admin Service Requests:
+         - GET /api/admin/service-requests -> 200 list (admin only)
+         - POST /api/admin/service-requests/{sr_id}/assign {manager_ids|all_managers, note}
+           -> 200; assigned_manager_ids set; timeline grew with "assigned to N mgr" entry.
+         - Verify in-app notifications + SMS attempt logged for each target manager.
+
+      4) Manager assignment filtering:
+         - Use admin token (super-manager) -> GET /manager/leads must include unassigned
+           and assigned-to-anyone leads (admin sees all).
+         - For an actual manager: filter `assigned_manager_ids` should match user.id OR
+           empty (visible to everyone).
+         - Same for /manager/service-requests.
+
+      5) Manager updates a SR -> customer should now also receive an in-app notification
+         (in addition to the existing SMS).
+
+frontend:
+  - task: "Dealer Portal product list overlap fix + admin-categories useRouter crash fix"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/dealer-portal.tsx + frontend/app/admin-categories.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          1) dealer-portal.tsx: products list View had maxHeight:280 but no overflow:hidden.
+             On iOS RN, Views default to overflow:'visible' so children rendered past the
+             container and overlapped Purchase Date / Address / City-State-Pin / Bill / Submit.
+             Wrapped the inner list in a nested ScrollView with maxHeight on the inner
+             ScrollView (works on iOS) and added overflow:'hidden' to the productList style.
+          2) admin-categories.tsx: line 23 referenced useRouter() but the import was removed
+             when migrating to safeBack helper. This caused a ReferenceError on render —
+             the category screen was crashing for the user. Removed the dangling line.
+
+  - task: "Notifications screen + bell card in profile"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/notifications.tsx + frontend/app/(tabs)/profile.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+
+  - task: "Admin Service Requests screen + assign-to-manager"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/admin-service-requests.tsx + frontend/app/(tabs)/profile.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+
+  - task: "Admin Leads — Add Lead (call) + Assign-to-manager"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/admin-leads.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
 
 agent_communication:
   - agent: "main"
@@ -430,6 +515,53 @@ frontend:
         admin path (only role_label differs), which is fully exercised here.
 
       No further backend retest required for these two features.
+  - agent: "testing"
+    message: |
+      New-feature regression (Notifications + Admin Leads + Admin Service Requests +
+      Manager filtering) via /app/backend_test_session.py against the public preview URL.
+      RESULT: 59 PASS / 1 FAIL, zero 5xx.
+
+      A) Notifications (PASS): GET /notifications without auth -> 401; with auth ->
+         200 with {items:[], unread_count}; GET /unread-count -> 200; mark-read by ids
+         and all=true both work; unread_count drops to 0 after all=true; cross-user
+         isolation verified — mgr1 sees lead-assigned notification, mgr2 does not.
+      B) Manager promotion (PASS): created mgr1 (+919999988887, leads+service) and
+         mgr2 (+919999988888, service only); demoted both at end.
+      C) Admin Leads create + assign (mostly PASS, 1 FAIL):
+         - POST /admin/leads with manager_ids=[mgr1] -> 200; admin_created=True,
+           source="call", referrer_user_id="", assigned_manager_ids=[mgr1]. mgr1 got
+           in-app notif type=lead_assigned; mgr2 did NOT (cross-user isolation).
+         - POST /admin/leads with all_managers=true -> assigned_manager_ids contains
+           mgr1 only (mgr2 lacks leads perm). mgr1 notified, mgr2 not.
+         - POST /admin/leads/{id}/assign -> 200, assigned_manager_ids updated.
+         - Negatives: empty name -> 400; invalid phone -> 400; non-admin -> 403. All PASS.
+         - **CRITICAL FAIL**: PATCH /admin/leads/{admin_created_lead_id} {status:"purchased"}
+           returns **400 "User not found"**. Root cause: services/loyalty.py:111
+           checks `if new_status=="purchased" and not lead.get("points_awarded")`
+           but does NOT check that `referrer_user_id` is non-empty. For admin-created
+           leads referrer_user_id="" so adjust_points("") raises ValueError("User not
+           found") → route returns 400. The lead status never updates to purchased,
+           breaking the documented "admin-created leads can be marked purchased
+           without payout" behavior. FIX: add `and lead.get("referrer_user_id")` to the
+           guard at services/loyalty.py:111.
+      D) Admin Service Requests (PASS): customer ramesh created SR with photo;
+         admin GET /admin/service-requests contains it; status=open filter works;
+         POST /admin/service-requests/{id}/assign with manager_ids=[mgr2] sets
+         assigned_manager_ids=[mgr2] and adds timeline entry "assigned to 1 mgr"
+         with note. mgr2 got notif type=service_assigned ref_id=sr_id. Re-assign
+         all_managers=True now includes BOTH mgr1 and mgr2 (both have service perm).
+      E) Manager filtering (PASS): admin (super-manager) GET /manager/leads sees
+         admin-created lead; GET /manager/service-requests sees the SR. Customer
+         hitting /manager/leads and /manager/service-requests -> 403. PATCH
+         /manager/service-requests/{id} {status:"in_progress", note} -> 200; customer
+         (ramesh) immediately sees a NEW notification type=service_status
+         ref_id=sr_id in their /notifications inbox.
+      F) Cleanup (PASS): DELETE /admin/managers/{mgr1_id} and {mgr2_id} both 200.
+
+      ACTION FOR MAIN AGENT: Fix loyalty.update_lead_status guard to skip the
+      referral payout when referrer_user_id is empty. After fix, the PATCH should
+      return 200 with status=purchased and points_awarded=0/absent.
+
   - agent: "testing"
     message: |
       Manager + Service Request regression via /app/backend_test.py — 26/26 passed, zero 5xx.

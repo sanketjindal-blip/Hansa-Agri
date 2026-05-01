@@ -14,10 +14,12 @@ export default function Profile() {
   const { user, logout } = useAuth();
   const { t, lang, setLang } = useI18n();
   const [points, setPoints] = useState<number | null>(null);
+  const [unreadNotif, setUnreadNotif] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     api.get('/me/points').then(r => { if (!cancelled) setPoints(r.data.balance ?? 0); }).catch(() => {});
+    api.get('/notifications/unread-count').then(r => { if (!cancelled) setUnreadNotif(r.data.unread_count || 0); }).catch(() => {});
     return () => { cancelled = true; };
   }, [user?.id]);
 
@@ -40,6 +42,7 @@ export default function Profile() {
       { icon: 'cube-outline', label: 'Manage Products', onPress: () => router.push('/admin-products') },
       { icon: 'apps-outline', label: 'Manage Categories', onPress: () => router.push('/admin-categories') },
       { icon: 'people-outline', label: 'Leads & Points', onPress: () => router.push('/admin-leads') },
+      { icon: 'build-outline', label: 'Service Requests', onPress: () => router.push('/admin-service-requests') },
       { icon: 'person-add-outline', label: 'Manage Managers', onPress: () => router.push('/admin-managers') },
       { icon: 'settings-outline', label: 'Admin Console (Dealers / Warranty / Company)', onPress: () => router.push('/admin-console') },
       { icon: 'storefront-outline', label: 'Dealer Portal', onPress: () => router.push('/dealer-portal') },
@@ -77,6 +80,20 @@ export default function Profile() {
             <Text style={styles.pointsSub}>= ₹ {points ?? 0}  ·  Tap to refer & earn 500 pts</Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color="#fff" />
+        </TouchableOpacity>
+
+        <TouchableOpacity testID="notif-card" onPress={() => router.push('/notifications')} style={styles.notifCard}>
+          <View style={styles.notifIcon}>
+            <Ionicons name="notifications" size={22} color="#fff" />
+            {unreadNotif > 0 && (
+              <View style={styles.badge}><Text style={styles.badgeTxt}>{unreadNotif > 99 ? '99+' : unreadNotif}</Text></View>
+            )}
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.notifLbl}>Notifications</Text>
+            <Text style={styles.notifSub}>{unreadNotif > 0 ? `${unreadNotif} new — tap to view` : 'You\u2019re all caught up'}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
         </TouchableOpacity>
 
         <View style={styles.section}>
@@ -141,6 +158,12 @@ const styles = StyleSheet.create({
   pointsVal: { color: '#fff', fontSize: 24, fontWeight: '800', marginTop: 2 },
   pointsUnit: { fontSize: 13, opacity: 0.85, fontWeight: '600' },
   pointsSub: { color: '#fff', fontSize: 11, opacity: 0.92, marginTop: 2 },
+  notifCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', padding: 14, borderRadius: 16, marginTop: 12, borderWidth: 1, borderColor: theme.colors.border },
+  notifIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center' },
+  badge: { position: 'absolute', top: -4, right: -4, minWidth: 20, height: 20, paddingHorizontal: 4, borderRadius: 10, backgroundColor: theme.colors.danger, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
+  badgeTxt: { color: '#fff', fontSize: 10, fontWeight: '800' },
+  notifLbl: { color: theme.colors.textPrimary, fontSize: 14, fontWeight: '700' },
+  notifSub: { color: theme.colors.textSecondary, fontSize: 12, marginTop: 2 },
   section: { marginTop: 20 },
   sectionTitle: { fontSize: 12, fontWeight: '700', color: theme.colors.textMuted, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 10, paddingLeft: 4 },
   langRow: { flexDirection: 'row', gap: 10 },

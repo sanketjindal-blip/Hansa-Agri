@@ -20,7 +20,6 @@ const ICON_OPTIONS = [
 ];
 
 export default function AdminCategories() {
-  const router = useRouter();
   const [cats, setCats] = useState<Cat[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Cat | null>(null);

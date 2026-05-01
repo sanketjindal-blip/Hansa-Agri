@@ -150,6 +150,7 @@ export default function DealerPortal() {
               {!!search && <TouchableOpacity onPress={() => setSearch('')}><Ionicons name="close-circle" size={18} color={theme.colors.textMuted} /></TouchableOpacity>}
             </View>
             <View style={styles.productList}>
+              <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" style={{ maxHeight: 280 }}>
               {filteredProducts.map(p => {
                 const selected = !!selections[p.id];
                 return (
@@ -172,6 +173,7 @@ export default function DealerPortal() {
                 );
               })}
               {filteredProducts.length === 0 && <Text style={styles.empty}>No products match "{search}"</Text>}
+              </ScrollView>
             </View>
 
             <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -253,7 +255,7 @@ const styles = StyleSheet.create({
   input: { backgroundColor: '#fff', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: theme.colors.border, color: theme.colors.textPrimary, fontSize: 14, marginBottom: 10 },
   searchBar: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 10, paddingHorizontal: 12, borderWidth: 1, borderColor: theme.colors.border, marginBottom: 8 },
   searchInput: { flex: 1, paddingVertical: 10, color: theme.colors.textPrimary, fontSize: 14 },
-  productList: { maxHeight: 280, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: theme.colors.border, padding: 6, marginBottom: 12 },
+  productList: { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: theme.colors.border, padding: 6, marginBottom: 12, overflow: 'hidden' },
   prodRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 8, borderRadius: 10 },
   prodRowOn: { backgroundColor: '#FFFBEA' },
   prodMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },

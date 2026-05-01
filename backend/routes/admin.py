@@ -10,9 +10,10 @@ from models.schemas import (
     AdminProductIn, AdminNewsIn, AdminOfferIn, DealerIn, CompanyIn,
     DealerLoginIn, LeadStatusIn, PointsAdjustIn, CategoryIn,
     CategoryReorderIn, MultiAssignWarrantyIn, ManagerPromoteIn, ManagerPermsIn,
+    AssignManagersIn, AdminLeadIn,
 )
 from services.warranty import assign_warranty as _assign_warranty
-from services import loyalty
+from services import loyalty, notifications
 from sms import send_sms
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -200,6 +201,140 @@ async def update_lead(lead_id: str, body: LeadStatusIn, user=Depends(require_adm
         return await loyalty.update_lead_status(lead_id, body.status, body.notes or "", user)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# ---- Admin-created Lead (from a phone call / walk-in) ----
+async def _resolve_managers(body: AssignManagersIn | AdminLeadIn, perm: str) -> list[str]:
+    """Resolve target manager_ids based on `all_managers` flag and user perm."""
+    if getattr(body, "all_managers", False):
+        cursor = db.users.find(
+            {"role": "manager", f"manager_perms.{perm}": True},
+            {"_id": 0, "id": 1},
+        )
+        items = await cursor.to_list(500)
+        return [u["id"] for u in items]
+    return [mid for mid in (body.manager_ids or []) if mid]
+
+
+@router.post("/leads")
+async def create_admin_lead(body: AdminLeadIn, user=Depends(require_admin)):
+    """Admin manually adds a lead received via phone call / walk-in. Optionally
+    assigns to specific managers (or all managers with leads permission)."""
+    try:
+        # `referrer` is the admin themselves; this lead is not eligible for the
+        # 500-pt referral payout (since the admin isn't the referrer).
+        lead = await loyalty.create_lead(
+            user, body.name, body.phone,
+            body.equipment_interest or "", body.notes or "",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    # Tag source + clear referral-payout eligibility (admin-source leads should
+    # not auto-credit any user when marked purchased).
+    target_mgr_ids = await _resolve_managers(body, "leads")
+    await db.leads.update_one(
+        {"id": lead["id"]},
+        {"$set": {
+            "source": body.source or "call",
+            "admin_created": True,
+            "referrer_user_id": "",  # disable auto-referral payout
+            "assigned_manager_ids": target_mgr_ids,
+        }},
+    )
+    # Notify each target manager (in-app + SMS)
+    if target_mgr_ids:
+        sms_text = (
+            f"HANSA: New lead assigned to you. {lead['name']} ({lead['phone']})"
+            + (f" - {lead['equipment_interest']}" if lead.get("equipment_interest") else "")
+        )
+        await notifications.notify_users(
+            target_mgr_ids,
+            title="New lead assigned",
+            body=f"{lead['name']} - {lead['phone']}" + (f" - interested in {lead['equipment_interest']}" if lead.get("equipment_interest") else ""),
+            ntype="lead_assigned",
+            ref_type="lead",
+            ref_id=lead["id"],
+            sms=True,
+            sms_message=sms_text,
+        )
+    return await db.leads.find_one({"id": lead["id"]}, {"_id": 0})
+
+
+@router.post("/leads/{lead_id}/assign")
+async def assign_lead(lead_id: str, body: AssignManagersIn, user=Depends(require_admin)):
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    target_mgr_ids = await _resolve_managers(body, "leads")
+    await db.leads.update_one(
+        {"id": lead_id},
+        {"$set": {"assigned_manager_ids": target_mgr_ids}},
+    )
+    if target_mgr_ids:
+        sms_text = (
+            f"HANSA: Lead assigned to you. {lead['name']} ({lead['phone']})."
+            + (f" Note: {body.note}" if body.note else "")
+        )
+        await notifications.notify_users(
+            target_mgr_ids,
+            title="Lead assigned to you",
+            body=f"{lead['name']} - {lead['phone']}" + (f" - {body.note}" if body.note else ""),
+            ntype="lead_assigned",
+            ref_type="lead",
+            ref_id=lead_id,
+            sms=True,
+            sms_message=sms_text,
+        )
+    return await db.leads.find_one({"id": lead_id}, {"_id": 0})
+
+
+# ---- Admin Service Requests ----
+@router.get("/service-requests")
+async def admin_list_service_requests(status: str | None = None, user=Depends(require_admin)):
+    q: dict = {}
+    if status:
+        q["status"] = status
+    items = await db.service_requests.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return items
+
+
+@router.post("/service-requests/{sr_id}/assign")
+async def assign_service_request(sr_id: str, body: AssignManagersIn, user=Depends(require_admin)):
+    sr = await db.service_requests.find_one({"id": sr_id}, {"_id": 0})
+    if not sr:
+        raise HTTPException(status_code=404, detail="Service request not found")
+    target_mgr_ids = await _resolve_managers(body, "service")
+    timeline_entry = {
+        "at": datetime.now(timezone.utc).isoformat(),
+        "by": user["id"],
+        "role": "admin",
+        "action": "assigned" + (" to all" if body.all_managers else f" to {len(target_mgr_ids)} mgr"),
+        "note": body.note or "",
+    }
+    await db.service_requests.update_one(
+        {"id": sr_id},
+        {"$set": {"assigned_manager_ids": target_mgr_ids,
+                  "updated_at": datetime.now(timezone.utc).isoformat()},
+         "$push": {"timeline": timeline_entry}},
+    )
+    if target_mgr_ids:
+        sms_text = (
+            f"HANSA: Service ticket assigned. {sr.get('title') or 'Service Request'} - "
+            f"{sr.get('customer_name') or sr.get('customer_phone', '')}"
+            + (f". Note: {body.note}" if body.note else "")
+        )
+        await notifications.notify_users(
+            target_mgr_ids,
+            title="Service ticket assigned to you",
+            body=f"{sr.get('title') or 'Service Request'} - {sr.get('customer_name') or ''} ({sr.get('customer_phone', '')})"
+                 + (f" - {body.note}" if body.note else ""),
+            ntype="service_assigned",
+            ref_type="service_request",
+            ref_id=sr_id,
+            sms=True,
+            sms_message=sms_text,
+        )
+    return await db.service_requests.find_one({"id": sr_id}, {"_id": 0})
 
 
 # ---- Users & Points (admin) ----
