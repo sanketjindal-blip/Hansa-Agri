@@ -67,6 +67,18 @@ export default function Home() {
           </TouchableOpacity>
         </View>
 
+        {/* Warranty expiry alert */}
+        {expiringWarranty && (
+          <TouchableOpacity testID="warranty-alert" onPress={() => router.push('/(tabs)/warranty')} style={styles.warnBanner}>
+            <Ionicons name="warning" size={20} color="#fff" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.warnTitle}>Warranty expiring soon</Text>
+              <Text style={styles.warnSub}>{expiringWarranty.product_name} · {expiringWarranty.days_left} days left</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#fff" />
+          </TouchableOpacity>
+        )}
+
         {/* Hero */}
         <ImageBackground
           source={{ uri: 'https://images.unsplash.com/photo-1745850783543-a29c3f3869ee?crop=entropy&cs=srgb&fm=jpg&w=1000&q=80' }}
@@ -149,7 +161,11 @@ export default function Home() {
         <View style={styles.quickRow}>
           <TouchableOpacity testID="quick-warranty" style={styles.quickCard} onPress={() => router.push('/(tabs)/warranty')}>
             <Ionicons name="shield-checkmark" size={24} color={theme.colors.secondary} />
-            <Text style={styles.quickTxt}>My Warranty</Text>
+            <Text style={styles.quickTxt}>Warranty</Text>
+          </TouchableOpacity>
+          <TouchableOpacity testID="quick-dealer" style={styles.quickCard} onPress={() => router.push('/dealers')}>
+            <Ionicons name="location" size={24} color={theme.colors.earth} />
+            <Text style={styles.quickTxt}>Dealers</Text>
           </TouchableOpacity>
           <TouchableOpacity testID="quick-support" style={styles.quickCard} onPress={() => router.push('/support')}>
             <Ionicons name="headset" size={24} color={theme.colors.primary} />
@@ -199,5 +215,8 @@ const styles = StyleSheet.create({
   newsSum: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 4 },
   quickRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 12, marginTop: 8 },
   quickCard: { flex: 1, backgroundColor: '#fff', borderRadius: 16, padding: 16, alignItems: 'center', gap: 8, borderWidth: 1, borderColor: theme.colors.border },
-  quickTxt: { fontWeight: '600', color: theme.colors.textPrimary },
+  quickTxt: { fontWeight: '600', color: theme.colors.textPrimary, fontSize: 12 },
+  warnBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 16, marginTop: 8, padding: 12, borderRadius: 14, backgroundColor: theme.colors.warning },
+  warnTitle: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  warnSub: { color: 'rgba(255,255,255,0.9)', fontSize: 11, marginTop: 2 },
 });

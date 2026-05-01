@@ -15,7 +15,9 @@ export default function Profile() {
     { icon: 'shield-checkmark-outline', label: 'Warranty', onPress: () => router.push('/(tabs)/warranty') },
     { icon: 'pricetag-outline', label: 'Offers & Discounts', onPress: () => router.push('/offers') },
     { icon: 'newspaper-outline', label: 'News & Updates', onPress: () => router.push('/news') },
+    { icon: 'location-outline', label: 'Find a Dealer', onPress: () => router.push('/dealers') },
     { icon: 'headset-outline', label: 'Support & Service', onPress: () => router.push('/support') },
+    ...(user?.role === 'admin' ? [{ icon: 'construct-outline', label: 'Admin Dashboard', onPress: () => router.push('/admin') }] : []),
   ];
 
   const onLogout = () => {

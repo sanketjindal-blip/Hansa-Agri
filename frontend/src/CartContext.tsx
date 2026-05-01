@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, ReactNode } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type CartItem = {
   product_id: string;
@@ -20,9 +21,28 @@ type CartCtx = {
 };
 
 const Ctx = createContext<CartCtx | null>(null);
+const STORAGE_KEY = 'rkai_cart';
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
+  const [hydrated, setHydrated] = useState(false);
+
+  // hydrate from storage
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(STORAGE_KEY);
+        if (raw) setItems(JSON.parse(raw));
+      } catch {}
+      setHydrated(true);
+    })();
+  }, []);
+
+  // persist on change
+  useEffect(() => {
+    if (!hydrated) return;
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items)).catch(() => {});
+  }, [items, hydrated]);
 
   const add = useCallback((item: Omit<CartItem, 'quantity'>, qty = 1) => {
     setItems((prev) => {

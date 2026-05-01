@@ -23,6 +23,8 @@ export default function RootLayout() {
               <Stack.Screen name="news" />
               <Stack.Screen name="offers" />
               <Stack.Screen name="support" />
+              <Stack.Screen name="dealers" />
+              <Stack.Screen name="admin" />
             </Stack>
           </CartProvider>
         </AuthProvider>

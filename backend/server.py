@@ -19,6 +19,12 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr
 
 from seed_data import SEED_PRODUCTS, SEED_NEWS, SEED_OFFERS, SEED_CUSTOMER_ORDERS
+from dealers_data import DEALERS
+
+try:
+    import razorpay  # optional - works only if keys are provided
+except Exception:
+    razorpay = None
 
 # ---------------- Setup ----------------
 MONGO_URL = os.environ["MONGO_URL"]
@@ -28,6 +34,10 @@ ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@rkai.com")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_DAYS = 30
+RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "")
+RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
+RAZORPAY_ENABLED = bool(RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET and razorpay)
+rzp_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET)) if RAZORPAY_ENABLED else None
 
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
@@ -123,6 +133,53 @@ class SupportTicketIn(BaseModel):
     subject: str
     message: str
     product_id: Optional[str] = None
+
+
+class RazorpayOrderIn(BaseModel):
+    amount_inr: float
+
+
+class RazorpayVerifyIn(BaseModel):
+    order_id: str
+    razorpay_payment_id: str
+    razorpay_order_id: str
+    razorpay_signature: str
+
+
+class AdminProductIn(BaseModel):
+    name: str
+    category: str
+    price: float
+    warranty_months: int = 12
+    description: str
+    image: str
+    features: List[str] = []
+    specifications: dict = {}
+    recommended_hp: str = ""
+    featured: bool = False
+
+
+class AdminNewsIn(BaseModel):
+    title: str
+    summary: str
+    body: str
+    image: str
+    tag: str = "Update"
+
+
+class AdminOfferIn(BaseModel):
+    code: str
+    title: str
+    description: str
+    discount_percent: int
+    banner_color: str = "#FF6600"
+    valid_until: str
+
+
+async def require_admin(user=Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    return user
 
 
 # ---------------- Auth Routes ----------------
@@ -340,6 +397,99 @@ async def create_ticket(body: SupportTicketIn, user=Depends(get_current_user)):
 async def my_tickets(user=Depends(get_current_user)):
     items = await db.support_tickets.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
     return items
+
+
+# ---------------- Dealers ----------------
+@api.get("/dealers")
+async def list_dealers():
+    return DEALERS
+
+
+# ---------------- Razorpay (optional - keys required) ----------------
+@api.get("/payments/config")
+async def payment_config():
+    return {"razorpay_enabled": RAZORPAY_ENABLED, "key_id": RAZORPAY_KEY_ID if RAZORPAY_ENABLED else ""}
+
+
+@api.post("/payments/razorpay/create-order")
+async def create_razorpay_order(body: RazorpayOrderIn, user=Depends(get_current_user)):
+    if not RAZORPAY_ENABLED:
+        raise HTTPException(status_code=400, detail="Razorpay not configured. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to backend .env")
+    amount_paise = int(round(body.amount_inr * 100))
+    order = rzp_client.order.create({"amount": amount_paise, "currency": "INR", "payment_capture": 1})
+    return {"order_id": order["id"], "amount": order["amount"], "currency": order["currency"], "key_id": RAZORPAY_KEY_ID}
+
+
+@api.post("/payments/razorpay/verify")
+async def verify_razorpay(body: RazorpayVerifyIn, user=Depends(get_current_user)):
+    if not RAZORPAY_ENABLED:
+        raise HTTPException(status_code=400, detail="Razorpay not configured")
+    try:
+        rzp_client.utility.verify_payment_signature({
+            "razorpay_order_id": body.razorpay_order_id,
+            "razorpay_payment_id": body.razorpay_payment_id,
+            "razorpay_signature": body.razorpay_signature,
+        })
+    except Exception:
+        raise HTTPException(status_code=400, detail="Signature verification failed")
+    await db.orders.update_one(
+        {"id": body.order_id, "user_id": user["id"]},
+        {"$set": {"payment_method": "razorpay", "payment_id": body.razorpay_payment_id, "status": "paid"}}
+    )
+    return {"status": "verified"}
+
+
+# ---------------- Admin ----------------
+@api.post("/admin/products")
+async def admin_create_product(body: AdminProductIn, user=Depends(require_admin)):
+    p = body.dict()
+    p["id"] = str(uuid.uuid4())
+    p["mrp"] = round(p["price"] * 1.15)
+    p["images"] = [p["image"]]
+    p["in_stock"] = True
+    p["rating"] = 4.5
+    await db.products.insert_one(p)
+    p.pop("_id", None)
+    return p
+
+
+@api.delete("/admin/products/{product_id}")
+async def admin_delete_product(product_id: str, user=Depends(require_admin)):
+    res = await db.products.delete_one({"id": product_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return {"deleted": True}
+
+
+@api.post("/admin/news")
+async def admin_create_news(body: AdminNewsIn, user=Depends(require_admin)):
+    n = body.dict()
+    n["id"] = str(uuid.uuid4())
+    n["published_at"] = datetime.now(timezone.utc).isoformat()
+    await db.news.insert_one(n)
+    n.pop("_id", None)
+    return n
+
+
+@api.post("/admin/offers")
+async def admin_create_offer(body: AdminOfferIn, user=Depends(require_admin)):
+    o = body.dict()
+    o["id"] = str(uuid.uuid4())
+    o["code"] = o["code"].upper().strip()
+    await db.offers.insert_one(o)
+    o.pop("_id", None)
+    return o
+
+
+@api.get("/admin/stats")
+async def admin_stats(user=Depends(require_admin)):
+    return {
+        "users": await db.users.count_documents({}),
+        "products": await db.products.count_documents({}),
+        "orders": await db.orders.count_documents({}),
+        "support_tickets": await db.support_tickets.count_documents({}),
+        "open_tickets": await db.support_tickets.count_documents({"status": "open"}),
+    }
 
 
 # ---------------- Health ----------------

@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
+import React, { useState, useMemo, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Modal } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,9 +21,15 @@ export default function Checkout() {
   const [state, setState] = useState('');
   const [pincode, setPincode] = useState('');
   const [promo, setPromo] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'cod' | 'online'>('cod');
+  const [paymentMethod, setPaymentMethod] = useState<'cod' | 'razorpay'>('cod');
   const [busy, setBusy] = useState(false);
   const [discount, setDiscount] = useState(0);
+  const [rzpEnabled, setRzpEnabled] = useState(false);
+  const [rzpHtml, setRzpHtml] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.get('/payments/config').then(r => setRzpEnabled(!!r.data.razorpay_enabled)).catch(() => {});
+  }, []);
 
   const total = useMemo(() => Math.max(0, subtotal - discount), [subtotal, discount]);
 
@@ -54,13 +61,46 @@ export default function Checkout() {
         payment_method: paymentMethod,
         promo_code: promo || undefined,
       });
+      const order = res.data;
+
+      if (paymentMethod === 'razorpay' && rzpEnabled) {
+        const rz = await api.post('/payments/razorpay/create-order', { amount_inr: order.total });
+        const html = `<!DOCTYPE html><html><body><script src="https://checkout.razorpay.com/v1/checkout.js"></script><script>
+var opts = { key: '${rz.data.key_id}', amount: ${rz.data.amount}, currency: 'INR', name: 'RKAI', description: 'Order ${order.order_number}', order_id: '${rz.data.order_id}', prefill: { name: '${fullName}', contact: '${phone}', email: '${user?.email || ''}' }, theme: { color: '#FF6600' }, handler: function(r){ window.ReactNativeWebView.postMessage(JSON.stringify({type:'success', order_id:'${order.id}', ...r})); }, modal: { ondismiss: function(){ window.ReactNativeWebView.postMessage(JSON.stringify({type:'cancel'})); } } };
+new Razorpay(opts).open();
+</script></body></html>`;
+        setRzpHtml(html);
+        setBusy(false);
+        return;
+      }
+
       clear();
-      Alert.alert('Order placed!', `Order #${res.data.order_number} confirmed. You can track it in My Purchases.`, [
+      Alert.alert('Order placed!', `Order #${order.order_number} confirmed. You can track it in My Purchases.`, [
         { text: 'View Orders', onPress: () => router.replace('/(tabs)/orders') },
       ]);
     } catch (e: any) {
       Alert.alert('Checkout failed', formatApiError(e));
     } finally { setBusy(false); }
+  };
+
+  const onRzpMessage = async (evt: any) => {
+    try {
+      const data = JSON.parse(evt.nativeEvent.data);
+      if (data.type === 'success') {
+        await api.post('/payments/razorpay/verify', {
+          order_id: data.order_id,
+          razorpay_payment_id: data.razorpay_payment_id,
+          razorpay_order_id: data.razorpay_order_id,
+          razorpay_signature: data.razorpay_signature,
+        });
+        setRzpHtml(null);
+        clear();
+        Alert.alert('Payment successful', 'Your order has been paid.', [{ text: 'View Orders', onPress: () => router.replace('/(tabs)/orders') }]);
+      } else {
+        setRzpHtml(null);
+        Alert.alert('Payment cancelled', 'You can retry from the Orders screen.');
+      }
+    } catch (e: any) { setRzpHtml(null); Alert.alert('Payment error', formatApiError(e)); }
   };
 
   return (
@@ -93,9 +133,12 @@ export default function Checkout() {
             <Ionicons name={paymentMethod === 'cod' ? 'radio-button-on' : 'radio-button-off'} size={22} color={theme.colors.primary} />
             <View style={{ flex: 1 }}><Text style={styles.pmTitle}>Cash on Delivery</Text><Text style={styles.pmSub}>Pay when you receive the product</Text></View>
           </TouchableOpacity>
-          <TouchableOpacity testID="pm-online" onPress={() => setPaymentMethod('online')} style={[styles.pmRow, paymentMethod === 'online' && styles.pmActive]}>
-            <Ionicons name={paymentMethod === 'online' ? 'radio-button-on' : 'radio-button-off'} size={22} color={theme.colors.primary} />
-            <View style={{ flex: 1 }}><Text style={styles.pmTitle}>Online Payment (UPI/Card)</Text><Text style={styles.pmSub}>Confirm payment link via dealer (demo)</Text></View>
+          <TouchableOpacity testID="pm-rzp" onPress={() => setPaymentMethod('razorpay')} style={[styles.pmRow, paymentMethod === 'razorpay' && styles.pmActive, !rzpEnabled && { opacity: 0.5 }]} disabled={!rzpEnabled}>
+            <Ionicons name={paymentMethod === 'razorpay' ? 'radio-button-on' : 'radio-button-off'} size={22} color={theme.colors.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.pmTitle}>Razorpay (UPI / Card / Netbanking)</Text>
+              <Text style={styles.pmSub}>{rzpEnabled ? 'Secure online payment via Razorpay' : 'Disabled — add RAZORPAY keys in backend .env to enable'}</Text>
+            </View>
           </TouchableOpacity>
 
           <Text style={styles.sectionTitle}>Order Summary</Text>
@@ -114,6 +157,16 @@ export default function Checkout() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+      <Modal visible={!!rzpHtml} animationType="slide" onRequestClose={() => setRzpHtml(null)}>
+        <SafeAreaView style={{ flex: 1 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
+            <TouchableOpacity onPress={() => setRzpHtml(null)}><Ionicons name="close" size={24} color={theme.colors.textPrimary} /></TouchableOpacity>
+            <Text style={{ flex: 1, textAlign: 'center', fontWeight: '700' }}>Secure Payment</Text>
+            <View style={{ width: 24 }} />
+          </View>
+          {rzpHtml && <WebView source={{ html: rzpHtml }} onMessage={onRzpMessage} javaScriptEnabled domStorageEnabled originWhitelist={['*']} />}
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
