@@ -23,6 +23,7 @@ export default function Profile() {
 
   const menu = [
     { icon: 'gift-outline', label: 'Refer & Earn — Submit a lead', onPress: () => router.push('/refer') },
+    { icon: 'construct-outline', label: 'Request Service / Repair', onPress: () => router.push('/service-request') },
     { icon: 'bag-outline', label: t('my_orders'), onPress: () => router.push('/(tabs)/orders') },
     { icon: 'shield-checkmark-outline', label: t('warranty'), onPress: () => router.push('/(tabs)/warranty') },
     { icon: 'pricetag-outline', label: t('offers_discounts'), onPress: () => router.push('/offers') },
@@ -30,11 +31,16 @@ export default function Profile() {
     { icon: 'location-outline', label: t('find_dealer'), onPress: () => router.push('/dealers') },
     { icon: 'share-social-outline', label: 'Follow us (Facebook, Instagram, YouTube)', onPress: () => router.push('/social') },
     { icon: 'headset-outline', label: t('support_service'), onPress: () => router.push('/support') },
+    ...(user?.role === 'manager' ? [
+      { icon: 'briefcase-outline', label: 'Manager Dashboard', onPress: () => router.push('/manager') },
+    ] : []),
     ...(user?.role === 'admin' ? [
+      { icon: 'briefcase-outline', label: 'Manager Dashboard (all modules)', onPress: () => router.push('/manager') },
       { icon: 'construct-outline', label: t('admin_dashboard'), onPress: () => router.push('/admin') },
       { icon: 'cube-outline', label: 'Manage Products', onPress: () => router.push('/admin-products') },
       { icon: 'apps-outline', label: 'Manage Categories', onPress: () => router.push('/admin-categories') },
       { icon: 'people-outline', label: 'Leads & Points', onPress: () => router.push('/admin-leads') },
+      { icon: 'person-add-outline', label: 'Manage Managers', onPress: () => router.push('/admin-managers') },
       { icon: 'settings-outline', label: 'Admin Console (Dealers / Warranty / Company)', onPress: () => router.push('/admin-console') },
       { icon: 'storefront-outline', label: 'Dealer Portal', onPress: () => router.push('/dealer-portal') },
     ] : []),

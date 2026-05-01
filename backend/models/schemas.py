@@ -164,6 +164,24 @@ class CategoryReorderIn(BaseModel):
     ids: List[str]
 
 
+class ManagerPromoteIn(BaseModel):
+    phone: str
+    name: Optional[str] = None
+    perms_leads: bool = True
+    perms_service: bool = True
+
+
+class ManagerPermsIn(BaseModel):
+    perms_leads: bool
+    perms_service: bool
+
+
+class ServiceUpdateIn(BaseModel):
+    status: str  # open | in_progress | resolved | closed | cancelled
+    note: Optional[str] = ""
+    resolution: Optional[str] = ""
+
+
 class WarrantyItemIn(BaseModel):
     product_id: str
     quantity: int = 1

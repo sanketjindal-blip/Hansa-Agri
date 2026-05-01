@@ -59,3 +59,21 @@ async def require_dealer(user=Depends(get_current_user)):
     if user.get("role") not in ("dealer", "admin"):
         raise HTTPException(status_code=403, detail="Dealer or admin required")
     return user
+
+
+async def require_manager_leads(user=Depends(get_current_user)):
+    role = user.get("role")
+    if role == "admin":
+        return user
+    if role == "manager" and (user.get("manager_perms") or {}).get("leads"):
+        return user
+    raise HTTPException(status_code=403, detail="Leads management permission required")
+
+
+async def require_manager_service(user=Depends(get_current_user)):
+    role = user.get("role")
+    if role == "admin":
+        return user
+    if role == "manager" and (user.get("manager_perms") or {}).get("service"):
+        return user
+    raise HTTPException(status_code=403, detail="Service management permission required")

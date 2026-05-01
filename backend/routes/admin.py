@@ -9,7 +9,7 @@ from core.security import require_admin, hash_password
 from models.schemas import (
     AdminProductIn, AdminNewsIn, AdminOfferIn, DealerIn, CompanyIn,
     DealerLoginIn, LeadStatusIn, PointsAdjustIn, CategoryIn,
-    CategoryReorderIn, MultiAssignWarrantyIn,
+    CategoryReorderIn, MultiAssignWarrantyIn, ManagerPromoteIn, ManagerPermsIn,
 )
 from services.warranty import assign_warranty as _assign_warranty
 from services import loyalty
@@ -298,3 +298,83 @@ async def delete_category(cat_id: str, user=Depends(require_admin)):
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Category not found")
     return {"deleted": True}
+
+
+# ---- Managers ----
+@router.get("/managers")
+async def list_managers(user=Depends(require_admin)):
+    items = await db.users.find(
+        {"role": "manager"}, {"_id": 0, "password_hash": 0}
+    ).sort("created_at", -1).to_list(500)
+    return items
+
+
+@router.post("/managers")
+async def promote_manager(body: ManagerPromoteIn, user=Depends(require_admin)):
+    from core.helpers import normalize_phone
+    from core.security import hash_password
+    phone = normalize_phone(body.phone)
+    if not phone or len(phone) < 12:
+        raise HTTPException(status_code=400, detail="Invalid phone")
+    perms = {"leads": bool(body.perms_leads), "service": bool(body.perms_service)}
+    if not perms["leads"] and not perms["service"]:
+        raise HTTPException(status_code=400, detail="At least one permission must be enabled")
+    existing = await db.users.find_one({"phone": phone})
+    if existing:
+        await db.users.update_one(
+            {"id": existing["id"]},
+            {"$set": {"role": "manager", "manager_perms": perms,
+                      "name": body.name or existing.get("name") or f"Manager {phone[-4:]}"}},
+        )
+    else:
+        await db.users.insert_one({
+            "id": str(uuid.uuid4()),
+            "email": f"{phone.lstrip('+')}@phone.hansa",
+            "name": body.name or f"Manager {phone[-4:]}",
+            "phone": phone,
+            "role": "manager",
+            "manager_perms": perms,
+            "points": 0,
+            "password_hash": hash_password(uuid.uuid4().hex),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+    try:
+        from sms import send_sms
+        roles = []
+        if perms["leads"]:
+            roles.append("Leads")
+        if perms["service"]:
+            roles.append("Service")
+        send_sms(
+            phone,
+            f"HANSA: You are now a manager. Modules: {', '.join(roles)}. "
+            "Login to the app with this number to access your dashboard.",
+        )
+    except Exception:
+        pass
+    target = await db.users.find_one({"phone": phone}, {"_id": 0, "password_hash": 0})
+    return target
+
+
+@router.patch("/managers/{user_id}")
+async def update_manager_perms(user_id: str, body: ManagerPermsIn, user=Depends(require_admin)):
+    if not body.perms_leads and not body.perms_service:
+        raise HTTPException(status_code=400, detail="At least one permission must be enabled")
+    res = await db.users.update_one(
+        {"id": user_id, "role": "manager"},
+        {"$set": {"manager_perms": {"leads": body.perms_leads, "service": body.perms_service}}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Manager not found")
+    return await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+
+
+@router.delete("/managers/{user_id}")
+async def demote_manager(user_id: str, user=Depends(require_admin)):
+    res = await db.users.update_one(
+        {"id": user_id, "role": "manager"},
+        {"$set": {"role": "customer"}, "$unset": {"manager_perms": ""}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Manager not found")
+    return {"demoted": True}

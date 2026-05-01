@@ -194,6 +194,46 @@ agent_communication:
       Test creds in /app/memory/test_credentials.md.
 
 backend:
+  - task: "Manager role + Service Request system"
+    implemented: true
+    working: true
+    file: "backend/routes/manager.py + backend/routes/service.py + backend/routes/admin.py + backend/core/security.py + backend/models/schemas.py + frontend/app/manager.tsx + frontend/app/admin-managers.tsx + frontend/app/service-request.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          Full regression for Manager + Service Request features via /app/backend_test.py against the public preview URL — 26/26 assertions passed, zero 5xx.
+          A) Admin managers: POST /api/admin/managers {phone:"9991110099", perms_leads:true, perms_service:true} -> 200 role=manager, manager_perms={leads:true,service:true}. GET /api/admin/managers lists it. PATCH {perms_leads:true, perms_service:false} -> 200 perms updated. PATCH with both false -> 400 "At least one permission must be enabled". POST phone="123" -> 400 "Invalid phone". POST with both perms false -> 400. DELETE -> 200 {demoted:true}; subsequent GET no longer contains them.
+          B) Service requests (multipart) as customer ramesh@farm.com: POST /api/service-requests with title/description and a real JPG as `photo` -> 200 with id, status="open", photo.url starting with /api/uploads/, timeline length 1. GET /api/service-requests/mine returns the new SR. GET /api/service-requests/{id} as owner -> 200. POST without title -> 422 (FastAPI Form validation). POST empty description -> 400. POST with fake .gif -> 400 "Photo type .gif not allowed". GET /api/uploads/{filename} -> 200 serves bytes. GET /api/uploads/..%2Fetc%2Fpasswd -> 404 (path-traversal blocked).
+          C) Manager flow with admin token: GET /api/manager/me -> 200 perms={leads:true,service:true}. GET /api/manager/service-requests contains the SR. PATCH to status=in_progress with note -> 200, status updated, timeline length grew to 2. PATCH to status=resolved with resolution -> 200, resolution stored. PATCH status=foobar -> 400. PATCH non-existent id -> 404. GET /api/manager/leads (admin) -> 200 list.
+          D) Permission gating as customer (ramesh): GET /api/manager/service-requests -> 403, GET /api/manager/leads -> 403, POST /api/admin/managers -> 403.
+          No backend errors. Feature cleared.
+      - working: "NA"
+        agent: "main"
+        comment: |
+          New ROLE 'manager' with per-user `manager_perms: {leads, service}`.
+          Endpoints:
+            ADMIN
+              GET    /api/admin/managers
+              POST   /api/admin/managers {phone, name?, perms_leads, perms_service}  (auto-creates user, sends welcome SMS)
+              PATCH  /api/admin/managers/{id} {perms_leads, perms_service}  (must keep at least one true)
+              DELETE /api/admin/managers/{id}  (demote -> customer)
+            MANAGER (admin also passes)
+              GET    /api/manager/me
+              GET    /api/manager/leads?status=  +  PATCH /api/manager/leads/{id}
+              GET    /api/manager/service-requests?status=  +  PATCH /api/manager/service-requests/{id} {status, note?, resolution?}
+            CUSTOMER
+              POST   /api/service-requests   (multipart: title, description, product_id?, order_id?, photo?, video?)
+              GET    /api/service-requests/mine
+              GET    /api/service-requests/{id}
+              GET    /api/uploads/{filename}  (static, defensive path-traversal check)
+          Storage: photos (\u22645 MB) and videos (\u226430 MB) saved under /app/backend/uploads/.
+          Service request status flow: open -> in_progress -> resolved -> closed | cancelled.
+          Smoke-tested: promote/list/patch/demote managers; create SR with photo + serve via /api/uploads; admin update SR with note. SMS notification sent to customer on status change. Validations covered (both-perms-off -> 400, invalid status -> 400, oversized files -> 413, wrong file types -> 400).
+
   - task: "Categories drag-to-reorder + product picker uses category list + multi-product warranty"
     implemented: true
     working: true
@@ -390,3 +430,19 @@ frontend:
         admin path (only role_label differs), which is fully exercised here.
 
       No further backend retest required for these two features.
+  - agent: "testing"
+    message: |
+      Manager + Service Request regression via /app/backend_test.py — 26/26 passed, zero 5xx.
+      A) Admin managers: create (9991110099, perms_leads+service=true) -> 200 role=manager; list contains new mgr;
+         PATCH perms_leads:true/perms_service:false -> 200; PATCH both false -> 400 "At least one permission must be enabled";
+         POST phone="123" -> 400 "Invalid phone"; POST both perms false at create -> 400;
+         DELETE -> 200 {demoted:true} and subsequent GET no longer lists them.
+      B) Service requests (customer ramesh@farm.com): POST /api/service-requests (multipart w/ real JPG) -> 200, status=open,
+         photo.url starts with /api/uploads/, timeline length 1; GET /service-requests/mine contains it; GET by id as owner -> 200;
+         POST no title -> 422 (FastAPI Form validation); POST empty description -> 400; POST with fake .gif -> 400;
+         GET /api/uploads/{filename} serves bytes; GET /api/uploads/..%2Fetc%2Fpasswd -> 404 (traversal blocked).
+      C) Manager flow with admin token: GET /manager/me -> 200 perms.leads&service=true; GET /manager/service-requests
+         contains SR; PATCH -> in_progress with note grows timeline to 2; PATCH -> resolved with resolution stored;
+         PATCH invalid status -> 400; PATCH non-existent id -> 404; GET /manager/leads -> 200 list.
+      D) Gating: customer hitting /manager/service-requests, /manager/leads, /admin/managers all return 403.
+      No backend errors in logs. Feature cleared; no further backend retest required.
