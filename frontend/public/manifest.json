@@ -1,0 +1,18 @@
+{
+  "name": "HANSA Agriculture",
+  "short_name": "HANSA",
+  "description": "Agriculture machinery, warranty tracking, dealer locator and rewards in one app.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1F2937",
+  "theme_color": "#F2A900",
+  "lang": "en-IN",
+  "dir": "ltr",
+  "categories": ["business", "shopping", "agriculture"],
+  "icons": [
+    { "src": "/assets/images/icon.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/images/adaptive-icon.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

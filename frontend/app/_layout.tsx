@@ -7,6 +7,7 @@ import { AuthProvider } from '../src/AuthContext';
 import { CartProvider } from '../src/CartContext';
 import { I18nProvider } from '../src/i18n';
 import ResponsiveFrame from '../src/components/ResponsiveFrame';
+import PwaInstaller from '../src/components/PwaInstaller';
 
 export default function RootLayout() {
   return (
@@ -34,6 +35,7 @@ export default function RootLayout() {
                   <Stack.Screen name="dealer-portal" />
                   <Stack.Screen name="social" />
                 </Stack>
+                <PwaInstaller />
               </ResponsiveFrame>
             </CartProvider>
           </AuthProvider>
