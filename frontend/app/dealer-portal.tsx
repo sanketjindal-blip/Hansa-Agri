@@ -128,6 +128,9 @@ export default function DealerPortal() {
         <TouchableOpacity onPress={() => setTab('history')} style={[styles.tab, tab === 'history' && styles.tabActive]}>
           <Text style={[styles.tabTxt, tab === 'history' && styles.tabTxtActive]}>My Sales ({orders.length})</Text>
         </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push('/dealer-inbox')} style={[styles.tab, { backgroundColor: '#F0F8FF', borderColor: '#0A84FF' }]}>
+          <Text style={[styles.tabTxt, { color: '#0A84FF' }]}>Assigned</Text>
+        </TouchableOpacity>
       </View>
 
       {tab === 'new' ? (

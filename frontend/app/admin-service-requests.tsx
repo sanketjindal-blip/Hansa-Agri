@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Image, Modal, KeyboardAvoidingView, Platform, RefreshControl, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Video, ResizeMode } from 'expo-av';
 import { api, formatApiError, absoluteUrl } from '../src/api';
@@ -25,6 +26,7 @@ type SR = {
 type Manager = { id: string; name?: string; phone: string; manager_perms?: { service?: boolean; leads?: boolean } };
 
 export default function AdminServiceRequests() {
+  const router = useRouter();
   const [filter, setFilter] = useState<'all' | typeof STATUSES[number]>('all');
   const [items, setItems] = useState<SR[]>([]);
   const [managers, setManagers] = useState<Manager[]>([]);
@@ -130,9 +132,13 @@ export default function AdminServiceRequests() {
                 <Ionicons name="person" size={12} color={theme.colors.textMuted} />
                 <Text style={styles.assignTxt}>
                   {sr.assigned_manager_ids && sr.assigned_manager_ids.length > 0
-                    ? `Assigned: ${sr.assigned_manager_ids.map(mgrName).join(', ')}`
-                    : 'Unassigned — tap to assign'}
+                    ? `Mgr: ${sr.assigned_manager_ids.map(mgrName).join(', ')}`
+                    : 'No manager'}
+                  {sr.assigned_dealer_user_ids?.length ? `  ·  Dealers: ${sr.assigned_dealer_user_ids.length}` : ''}
                 </Text>
+                <TouchableOpacity onPress={(e) => { e.stopPropagation(); router.push({ pathname: '/admin-assign-dealer', params: { type: 'sr', id: sr.id, label: sr.title } }); }} style={styles.dealerBtn}>
+                  <Text style={styles.dealerBtnTxt}>{sr.assigned_dealer_user_ids?.length ? 'Reassign Dealer' : '+ Dealer'}</Text>
+                </TouchableOpacity>
               </View>
             </TouchableOpacity>
           ))}
@@ -209,6 +215,8 @@ const styles = StyleSheet.create({
   dateTxt: { color: theme.colors.textMuted, fontSize: 11, marginLeft: 4 },
   assignRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: theme.colors.border },
   assignTxt: { fontSize: 11, color: theme.colors.textMuted, flex: 1 },
+  dealerBtn: { paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#FFF8E6', borderRadius: 999, borderWidth: 1, borderColor: theme.colors.primary },
+  dealerBtnTxt: { fontSize: 10, fontWeight: '700', color: theme.colors.primary },
   pill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1 },
   pillTxt: { fontSize: 10, fontWeight: '800', letterSpacing: 1 },
   modalWrap: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },

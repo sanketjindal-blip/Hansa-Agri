@@ -14,7 +14,7 @@ const LEAD_STATUSES = ['new', 'contacted', 'purchased', 'lost'] as const;
 export default function ManagerDashboard() {
   const router = useRouter();
   const { user } = useAuth();
-  const [perms, setPerms] = useState<{ leads?: boolean; service?: boolean }>({});
+  const [perms, setPerms] = useState<{ leads?: boolean; service?: boolean; warranty?: boolean; points?: boolean }>({});
   const [tab, setTab] = useState<'leads' | 'service'>('leads');
   const [loading, setLoading] = useState(true);
 
@@ -26,13 +26,14 @@ export default function ManagerDashboard() {
     api.get('/manager/me').then(r => {
       const p = r.data.perms || {};
       setPerms(p);
-      // default to first available tab
       if (p.leads) setTab('leads');
       else if (p.service) setTab('service');
     }).finally(() => setLoading(false));
   }, [user]);
 
   if (loading) return <SafeAreaView style={styles.safe}><ActivityIndicator color={theme.colors.primary} style={{ marginTop: 60 }} /></SafeAreaView>;
+
+  const showQuick = perms.warranty || perms.points;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -41,6 +42,22 @@ export default function ManagerDashboard() {
         <Text style={styles.title}>Manager Dashboard</Text>
         <View style={{ width: 24 }} />
       </View>
+      {showQuick && (
+        <View style={styles.quickRow}>
+          {perms.warranty && (
+            <TouchableOpacity testID="open-warranty" onPress={() => router.push('/dealer-portal')} style={[styles.quickBtn, { backgroundColor: '#F0F8FF', borderColor: '#0A84FF' }]}>
+              <Ionicons name="shield-checkmark" size={18} color="#0A84FF" />
+              <Text style={[styles.quickLbl, { color: '#0A84FF' }]}>Activate Warranty</Text>
+            </TouchableOpacity>
+          )}
+          {perms.points && (
+            <TouchableOpacity testID="open-points" onPress={() => router.push('/admin-leads')} style={[styles.quickBtn, { backgroundColor: '#FFF8E6', borderColor: theme.colors.primary }]}>
+              <Ionicons name="cash" size={18} color={theme.colors.primary} />
+              <Text style={[styles.quickLbl, { color: theme.colors.primary }]}>Adjust Points</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
       <View style={styles.tabRow}>
         {perms.leads && (
           <TouchableOpacity onPress={() => setTab('leads')} style={[styles.tab, tab === 'leads' && styles.tabActive]}>
@@ -57,8 +74,11 @@ export default function ManagerDashboard() {
       </View>
       {tab === 'leads' && perms.leads && <LeadsTab />}
       {tab === 'service' && perms.service && <ServiceTab />}
-      {!perms.leads && !perms.service && (
-        <View style={{ padding: 24 }}><Text style={styles.empty}>No modules assigned. Ask the admin to grant Leads or Service permission.</Text></View>
+      {!perms.leads && !perms.service && !perms.warranty && !perms.points && (
+        <View style={{ padding: 24 }}><Text style={styles.empty}>No modules assigned. Ask the admin to grant a permission.</Text></View>
+      )}
+      {!perms.leads && !perms.service && (perms.warranty || perms.points) && (
+        <View style={{ padding: 24 }}><Text style={styles.empty}>Use the buttons above to access your assigned tools.</Text></View>
       )}
     </SafeAreaView>
   );
@@ -69,6 +89,11 @@ function LeadsTab() {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Status update modal
+  const [target, setTarget] = useState<any | null>(null);
+  const [nextStatus, setNextStatus] = useState<typeof LEAD_STATUSES[number]>('contacted');
+  const [remark, setRemark] = useState('');
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -78,19 +103,38 @@ function LeadsTab() {
   }, [filter]);
   useEffect(() => { load(); }, [load]);
 
-  const update = async (lead: any, status: string) => {
-    if (status === 'purchased' && lead.status !== 'purchased') {
-      return Alert.alert('Mark as purchased?', `This will credit 500 points to ${lead.referrer_name || 'the referrer'}.`, [
-        { text: 'Cancel', style: 'cancel' }, { text: 'Confirm', onPress: () => doPatch(lead.id, status) },
+  const open = (lead: any, ns: typeof LEAD_STATUSES[number]) => {
+    setTarget(lead); setNextStatus(ns); setRemark('');
+  };
+  const submit = async () => {
+    if (!target) return;
+    if (!remark.trim()) { Alert.alert('Remark required', 'Add a short note to track the latest update.'); return; }
+    if (nextStatus === 'purchased' && target.status !== 'purchased') {
+      return Alert.alert('Mark as purchased?', `This will credit 500 points to ${target.referrer_name || 'the referrer'}.`, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Confirm', onPress: () => doPatch() },
       ]);
     }
-    doPatch(lead.id, status);
+    doPatch();
   };
-  const doPatch = async (id: string, status: string) => {
-    try { await api.patch(`/manager/leads/${id}`, { status, notes: '' }); await load(); }
-    catch (e: any) { Alert.alert('Error', formatApiError(e)); }
+  const doPatch = async () => {
+    if (!target) return;
+    setBusy(true);
+    try {
+      await api.patch(`/manager/leads/${target.id}`, { status: nextStatus, remark });
+      Alert.alert('Lead updated', `Status \u2192 ${nextStatus.toUpperCase()}`);
+      setTarget(null); await load();
+    } catch (e: any) { Alert.alert('Error', formatApiError(e)); } finally { setBusy(false); }
   };
+
   const statusColor = (s: string) => ({ new: '#FF9500', contacted: '#0A84FF', purchased: '#34C759', lost: '#8E8E93' } as any)[s] || theme.colors.textMuted;
+  const lastUpdate = (l: any) => {
+    if (!l.timeline?.length) return null;
+    const t = l.timeline[l.timeline.length - 1];
+    const when = new Date(t.at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    const txt = t.remark || t.action;
+    return `Latest: ${when} \u00B7 ${txt}`;
+  };
 
   return (
     <View style={{ flex: 1 }}>
@@ -112,11 +156,12 @@ function LeadsTab() {
                 <View style={{ flex: 1 }}><Text style={styles.cardTitle}>{l.name}</Text><Text style={styles.cardSub}>{l.phone}{l.equipment_interest ? '  ·  ' + l.equipment_interest : ''}</Text></View>
                 <View style={[styles.pill, { backgroundColor: statusColor(l.status) + '22', borderColor: statusColor(l.status) }]}><Text style={[styles.pillTxt, { color: statusColor(l.status) }]}>{l.status.toUpperCase()}</Text></View>
               </View>
-              <Text style={styles.refTxt}>Referred by: {l.referrer_name || '—'} · {l.referrer_phone}</Text>
+              <Text style={styles.refTxt}>Referred by: {l.referrer_name || '—'} · {l.referrer_phone || '—'}</Text>
+              {!!lastUpdate(l) && <Text style={styles.latestUpdate}>{lastUpdate(l)}</Text>}
               <View style={styles.actions}>
                 {LEAD_STATUSES.filter(s => s !== l.status).map(s => (
-                  <TouchableOpacity key={s} onPress={() => update(l, s)} style={[styles.actBtn, s === 'purchased' && { backgroundColor: '#E6F7E9', borderColor: '#34C759' }]}>
-                    <Text style={[styles.actLbl, s === 'purchased' && { color: '#34C759' }]}>{s === 'purchased' ? 'Mark Purchased (+500)' : `→ ${s}`}</Text>
+                  <TouchableOpacity key={s} onPress={() => open(l, s)} style={[styles.actBtn, s === 'purchased' && { backgroundColor: '#E6F7E9', borderColor: '#34C759' }]}>
+                    <Text style={[styles.actLbl, s === 'purchased' && { color: '#34C759' }]}>{s === 'purchased' ? 'Mark Purchased (+500)' : `\u2192 ${s}`}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -124,6 +169,42 @@ function LeadsTab() {
           ))}
         </ScrollView>
       )}
+
+      <Modal visible={!!target} animationType="slide" transparent onRequestClose={() => setTarget(null)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalWrap}>
+          <View style={styles.modal}>
+            <ScrollView keyboardShouldPersistTaps="handled">
+              <Text style={styles.modalTitle}>Update lead</Text>
+              <Text style={styles.modalSub}>{target?.name} · {target?.phone}</Text>
+              <Text style={styles.field}>Move status to</Text>
+              <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                {LEAD_STATUSES.map(s => (
+                  <TouchableOpacity key={s} onPress={() => setNextStatus(s)} style={[styles.chip, nextStatus === s && styles.chipActive]}>
+                    <Text style={[styles.chipTxt, nextStatus === s && styles.chipTxtActive]}>{s.toUpperCase()}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={styles.field}>Remark *</Text>
+              <TextInput placeholder="e.g. Customer asked for callback tomorrow at 11am" placeholderTextColor={theme.colors.textMuted} value={remark} onChangeText={setRemark} multiline style={[styles.input, { minHeight: 80, textAlignVertical: 'top' }]} />
+              {target?.timeline?.length ? (
+                <View style={{ marginTop: 12 }}>
+                  <Text style={styles.field}>Activity</Text>
+                  {target.timeline.slice(-5).reverse().map((t: any, i: number) => (
+                    <View key={i} style={styles.timelineRow}>
+                      <Text style={styles.timelineDate}>{new Date(t.at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</Text>
+                      <Text style={styles.timelineTxt}>[{t.role}] {t.action}{t.remark ? '  — ' + t.remark : ''}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
+                <TouchableOpacity onPress={() => setTarget(null)} style={[styles.btn, { backgroundColor: '#eee', flex: 1 }]}><Text style={[styles.btnTxt, { color: theme.colors.textPrimary }]}>Cancel</Text></TouchableOpacity>
+                <TouchableOpacity onPress={submit} disabled={busy} style={[styles.btn, { backgroundColor: theme.colors.primary, flex: 1 }]}>{busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnTxt}>Save</Text>}</TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -135,7 +216,7 @@ function ServiceTab() {
   const [refreshing, setRefreshing] = useState(false);
   const [target, setTarget] = useState<any | null>(null);
   const [status, setStatus] = useState<typeof SR_STATUSES[number]>('in_progress');
-  const [note, setNote] = useState('');
+  const [remark, setRemark] = useState('');
   const [resolution, setResolution] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -148,13 +229,14 @@ function ServiceTab() {
   useEffect(() => { load(); }, [load]);
 
   const open = (sr: any) => {
-    setTarget(sr); setStatus(sr.status === 'open' ? 'in_progress' : sr.status); setNote(''); setResolution(sr.resolution || '');
+    setTarget(sr); setStatus(sr.status === 'open' ? 'in_progress' : sr.status); setRemark(''); setResolution(sr.resolution || '');
   };
   const submit = async () => {
+    if (!remark.trim()) { Alert.alert('Remark required', 'Add a short note describing the latest update.'); return; }
     setBusy(true);
     try {
-      await api.patch(`/manager/service-requests/${target.id}`, { status, note, resolution });
-      Alert.alert('Updated', `Status → ${status.toUpperCase()}`);
+      await api.patch(`/manager/service-requests/${target.id}`, { status, remark, resolution });
+      Alert.alert('Updated', `Status \u2192 ${status.toUpperCase()}`);
       setTarget(null); await load();
     } catch (e: any) { Alert.alert('Error', formatApiError(e)); } finally { setBusy(false); }
   };
@@ -165,6 +247,13 @@ function ServiceTab() {
     const base = process.env.EXPO_PUBLIC_BACKEND_URL || '';
     if (rel.startsWith('http')) return rel;
     return base + rel;
+  };
+  const lastUpdate = (sr: any) => {
+    if (!sr.timeline?.length) return null;
+    const t = sr.timeline[sr.timeline.length - 1];
+    const when = new Date(t.at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    const txt = t.remark || t.action;
+    return `Latest: ${when} \u00B7 ${txt}`;
   };
 
   return (
@@ -193,6 +282,7 @@ function ServiceTab() {
                 </View>
               </View>
               <Text style={styles.desc} numberOfLines={2}>{sr.description}</Text>
+              {!!lastUpdate(sr) && <Text style={styles.latestUpdate}>{lastUpdate(sr)}</Text>}
               <View style={styles.attachRow}>
                 {sr.photo && <Image source={{ uri: toAbsolute(sr.photo.url) }} style={styles.attachThumb} />}
                 {sr.video && (
@@ -217,11 +307,11 @@ function ServiceTab() {
               {!!target?.video && <Video source={{ uri: toAbsolute(target.video.url)! }} style={styles.fullVideo} useNativeControls resizeMode={ResizeMode.CONTAIN} />}
               {target?.timeline?.length ? (
                 <View style={{ marginTop: 12 }}>
-                  <Text style={styles.field}>Timeline</Text>
-                  {target.timeline.map((t: any, i: number) => (
+                  <Text style={styles.field}>Activity</Text>
+                  {target.timeline.slice(-6).reverse().map((t: any, i: number) => (
                     <View key={i} style={styles.timelineRow}>
                       <Text style={styles.timelineDate}>{new Date(t.at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</Text>
-                      <Text style={styles.timelineTxt}>{t.action}{t.note ? '  — ' + t.note : ''}</Text>
+                      <Text style={styles.timelineTxt}>[{t.role}] {t.action}{t.remark ? '  — ' + t.remark : ''}</Text>
                     </View>
                   ))}
                 </View>
@@ -234,8 +324,8 @@ function ServiceTab() {
                   </TouchableOpacity>
                 ))}
               </View>
-              <Text style={styles.field}>Note (optional)</Text>
-              <TextInput placeholder="Internal note / message to customer" placeholderTextColor={theme.colors.textMuted} value={note} onChangeText={setNote} multiline style={[styles.input, { minHeight: 60, textAlignVertical: 'top' }]} />
+              <Text style={styles.field}>Remark *</Text>
+              <TextInput placeholder="e.g. Customer needs spare part, ETA 3 days" placeholderTextColor={theme.colors.textMuted} value={remark} onChangeText={setRemark} multiline style={[styles.input, { minHeight: 60, textAlignVertical: 'top' }]} />
               <Text style={styles.field}>Resolution (shown to customer)</Text>
               <TextInput placeholder="Final resolution / next steps" placeholderTextColor={theme.colors.textMuted} value={resolution} onChangeText={setResolution} multiline style={[styles.input, { minHeight: 70, textAlignVertical: 'top' }]} />
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
@@ -254,7 +344,11 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16 },
   title: { fontSize: 18, fontWeight: '700', color: theme.colors.textPrimary },
-  tabRow: { flexDirection: 'row', marginHorizontal: 16, gap: 8 },
+  tabRow: { flexDirection: 'row', marginHorizontal: 16, gap: 8, marginTop: 4 },
+  quickRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingTop: 6, paddingBottom: 4 },
+  quickBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 12, borderWidth: 1 },
+  quickLbl: { fontSize: 12, fontWeight: '700' },
+  latestUpdate: { fontSize: 11, color: theme.colors.textSecondary, marginTop: 6, fontStyle: 'italic' },
   tab: { flex: 1, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, backgroundColor: '#fff', borderRadius: 999, borderWidth: 1, borderColor: theme.colors.border },
   tabActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
   tabTxt: { color: theme.colors.textSecondary, fontWeight: '700', fontSize: 12 },

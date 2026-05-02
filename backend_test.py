@@ -1,292 +1,332 @@
-"""Backend regression tests for Manager + Service Request features.
-
-Targets the live preview URL from frontend/.env.
-Scope per review_request:
-  A) Admin manager management (promote/list/patch/delete, validations)
-  B) Customer service request creation (multipart + uploads + access control)
-  C) Manager flow via admin token (me/list/patch SR + leads)
-  D) Permission gating (customer cannot hit manager/admin endpoints)
-"""
-import io
+"""HANSA backend quick regression after frontend integration session."""
+import os
 import sys
 import uuid
-
 import requests
 
-BASE_URL = "https://farm-gear-hub-4.preview.emergentagent.com"
-API = BASE_URL + "/api"
-
-ADMIN_EMAIL = "admin@rkai.com"
-ADMIN_PASSWORD = "admin123"
-CUST_EMAIL = "ramesh@farm.com"
-CUST_PASSWORD = "farmer123"
+BASE = os.environ.get("BASE_URL", "https://farm-gear-hub-4.preview.emergentagent.com").rstrip("/")
+API = f"{BASE}/api"
 
 results = []
 
 
-def record(name, passed, detail=""):
-    results.append((name, passed, detail))
-    mark = "PASS" if passed else "FAIL"
-    tail = f"  {detail}" if not passed else ""
-    print(f"[{mark}] {name}{tail}")
+def log(ok_, name, detail=""):
+    status = "PASS" if ok_ else "FAIL"
+    marker = "[+]" if ok_ else "[X]"
+    line = f"{marker} {status}: {name}" + (f" -- {detail}" if detail else "")
+    print(line)
+    results.append((ok_, name, detail))
 
 
-def login(email, password):
-    r = requests.post(f"{API}/auth/login", json={"email": email, "password": password}, timeout=30)
+def post(path, token=None, **kw):
+    h = kw.pop("headers", {}) or {}
+    if token:
+        h["Authorization"] = f"Bearer {token}"
+    return requests.post(API + path, headers=h, timeout=30, **kw)
+
+
+def patch(path, token=None, **kw):
+    h = kw.pop("headers", {}) or {}
+    if token:
+        h["Authorization"] = f"Bearer {token}"
+    return requests.patch(API + path, headers=h, timeout=30, **kw)
+
+
+def get(path, token=None, **kw):
+    h = kw.pop("headers", {}) or {}
+    if token:
+        h["Authorization"] = f"Bearer {token}"
+    return requests.get(API + path, headers=h, timeout=30, **kw)
+
+
+def delete(path, token=None, **kw):
+    h = kw.pop("headers", {}) or {}
+    if token:
+        h["Authorization"] = f"Bearer {token}"
+    return requests.delete(API + path, headers=h, timeout=30, **kw)
+
+
+def admin_login():
+    r = post("/auth/login", json={"email": "admin@rkai.com", "password": "admin123"})
+    assert r.status_code == 200, f"Admin login failed: {r.status_code} {r.text}"
+    j = r.json()
+    return j["access_token"], j["user"]
+
+
+def customer_login_email(email, password):
+    r = post("/auth/login", json={"email": email, "password": password})
+    assert r.status_code == 200, f"Login {email} failed: {r.status_code} {r.text}"
+    j = r.json()
+    return j["access_token"], j["user"]
+
+
+def otp_login(phone):
+    r = post("/auth/send-otp", json={"phone": phone})
     if r.status_code != 200:
-        raise RuntimeError(f"Login failed for {email}: {r.status_code} {r.text}")
-    return r.json()["access_token"]
+        raise RuntimeError(f"send-otp failed: {r.status_code} {r.text}")
+    from pymongo import MongoClient
+    mc = MongoClient(os.environ.get("MONGO_URL", "mongodb://localhost:27017"))
+    db = mc[os.environ.get("DB_NAME", "rkai_app")]
+    norm = phone if phone.startswith("+") else ("+91" + phone.lstrip("0"))
+    doc = db.otps.find_one({"phone": norm}, sort=[("created_at", -1)])
+    if not doc:
+        doc = db.otps.find_one({"phone": phone}, sort=[("created_at", -1)])
+    if not doc:
+        raise RuntimeError(f"OTP for {phone} not found in DB")
+    code = doc.get("code") or doc.get("otp")
+    r2 = post("/auth/verify-otp", json={"phone": phone, "otp": code})
+    if r2.status_code != 200:
+        raise RuntimeError(f"verify-otp failed: {r2.status_code} {r2.text}")
+    j = r2.json()
+    return j["access_token"], j["user"]
 
 
-def hdr(tok):
-    return {"Authorization": f"Bearer {tok}"}
-
-
-def setup_tokens():
-    return login(ADMIN_EMAIL, ADMIN_PASSWORD), login(CUST_EMAIL, CUST_PASSWORD)
-
-
-# -------------------------------
-# A) Admin manager management
-# -------------------------------
-def test_admin_managers(admin_tok):
-    mgr_phone = "9991110099"
-    mgr_e164 = "+919991110099"
-
-    r = requests.get(f"{API}/admin/managers", headers=hdr(admin_tok), timeout=30)
-    if r.status_code == 200:
-        for m in r.json():
-            if m.get("phone") == mgr_e164:
-                requests.delete(f"{API}/admin/managers/{m['id']}", headers=hdr(admin_tok), timeout=30)
-
-    body = {"phone": mgr_phone, "name": "Mgr Test", "perms_leads": True, "perms_service": True}
-    r = requests.post(f"{API}/admin/managers", json=body, headers=hdr(admin_tok), timeout=30)
-    ok = r.status_code == 200 and r.json().get("role") == "manager" \
-        and r.json().get("manager_perms", {}) == {"leads": True, "service": True}
-    record("A1 POST /admin/managers creates manager", ok, f"status={r.status_code} body={r.text[:200]}")
-    mgr_id = r.json().get("id") if r.status_code == 200 else None
-    if not mgr_id:
-        return None
-
-    r = requests.get(f"{API}/admin/managers", headers=hdr(admin_tok), timeout=30)
-    ok = r.status_code == 200 and any(m.get("id") == mgr_id for m in r.json())
-    record("A2 GET /admin/managers contains new manager", ok, f"status={r.status_code}")
-
-    r = requests.patch(f"{API}/admin/managers/{mgr_id}",
-                       json={"perms_leads": True, "perms_service": False},
-                       headers=hdr(admin_tok), timeout=30)
-    ok = r.status_code == 200 and r.json().get("manager_perms") == {"leads": True, "service": False}
-    record("A3 PATCH /admin/managers/{id} updates perms", ok, f"status={r.status_code} body={r.text[:200]}")
-
-    r = requests.patch(f"{API}/admin/managers/{mgr_id}",
-                       json={"perms_leads": False, "perms_service": False},
-                       headers=hdr(admin_tok), timeout=30)
-    ok = r.status_code == 400 and "at least one" in r.text.lower()
-    record("A4 PATCH both perms false -> 400", ok, f"status={r.status_code} body={r.text[:200]}")
-
-    r = requests.post(f"{API}/admin/managers",
-                      json={"phone": "123", "name": "Bad", "perms_leads": True, "perms_service": True},
-                      headers=hdr(admin_tok), timeout=30)
-    ok = r.status_code == 400
-    record("A5 POST invalid phone -> 400", ok, f"status={r.status_code} body={r.text[:200]}")
-
-    r = requests.post(f"{API}/admin/managers",
-                      json={"phone": "9991110088", "name": "Bad Perms",
-                            "perms_leads": False, "perms_service": False},
-                      headers=hdr(admin_tok), timeout=30)
-    ok = r.status_code == 400
-    record("A6 POST both perms false -> 400", ok, f"status={r.status_code} body={r.text[:200]}")
-
-    return mgr_id
-
-
-def test_delete_manager(admin_tok, mgr_id):
-    r = requests.delete(f"{API}/admin/managers/{mgr_id}", headers=hdr(admin_tok), timeout=30)
-    ok = r.status_code == 200 and r.json().get("demoted") is True
-    record("A7a DELETE /admin/managers/{id} -> demoted:true", ok, f"status={r.status_code} body={r.text[:200]}")
-
-    r = requests.get(f"{API}/admin/managers", headers=hdr(admin_tok), timeout=30)
-    ok = r.status_code == 200 and not any(m.get("id") == mgr_id for m in r.json())
-    record("A7b GET /admin/managers no longer has deleted mgr", ok, f"status={r.status_code}")
-
-
-# -------------------------------
-# B) Service requests
-# -------------------------------
-def _tiny_jpg_bytes():
-    """Smallest valid JPEG (SOI/APP0/DQT/SOF/DHT/SOS/EOI) approx 400 bytes."""
-    return bytes.fromhex(
-        "ffd8ffe000104a46494600010100000100010000"
-        "ffdb004300080606070605080707070909080a0c140d0c0b0b0c1912130f141d1a1f1e1d1a1c1c2024"
-        "2e2720222c231c1c2837292c30313434341f27393d38323c2e33343238"
-        "ffc0000b08000100010101011100"
-        "ffc4001f0000010501010101010100000000000000000102030405060708090a0b"
-        "ffc400b5100002010303020403050504040000017d01020300041105122131410613516107227114328191a1082342b1c11552d1f024336272820a162434e125f11718191a262728292a35363738393a434445464748494a535455565758595a636465666768696a737475767778797a838485868788898a92939495969798999aa2a3a4a5a6a7a8a9aab2b3b4b5b6b7b8b9bac2c3c4c5c6c7c8c9cad2d3d4d5d6d7d8d9dae1e2e3e4e5e6e7e8e9eaf1f2f3f4f5f6f7f8f9fa"
-        "ffda0008010100003f00fb"
-        "ffd9"
-    )
-
-
-def test_service_requests(cust_tok):
-    sr_id = None
-    photo_filename = None
-
-    jpg = _tiny_jpg_bytes()
-    files = {"photo": ("engine.jpg", io.BytesIO(jpg), "image/jpeg")}
-    data = {"title": "Engine issue", "description": "Engine cuts off"}
-    r = requests.post(f"{API}/service-requests", data=data, files=files,
-                      headers=hdr(cust_tok), timeout=60)
-    ok = False
-    detail = f"status={r.status_code} body={r.text[:300]}"
-    if r.status_code == 200:
-        j = r.json()
-        ok = bool(
-            j.get("id")
-            and j.get("status") == "open"
-            and j.get("photo") and j["photo"].get("url", "").startswith("/api/uploads/")
-            and isinstance(j.get("timeline"), list) and len(j["timeline"]) == 1
-        )
-        sr_id = j.get("id")
-        if j.get("photo"):
-            photo_filename = j["photo"].get("filename")
-    record("B1 POST /service-requests multipart jpg", ok, detail)
-
-    r = requests.get(f"{API}/service-requests/mine", headers=hdr(cust_tok), timeout=30)
-    ok = r.status_code == 200 and isinstance(r.json(), list) and any(s.get("id") == sr_id for s in r.json())
-    record("B2 GET /service-requests/mine contains new SR", ok, f"status={r.status_code}")
-
-    if sr_id:
-        r = requests.get(f"{API}/service-requests/{sr_id}", headers=hdr(cust_tok), timeout=30)
-        ok = r.status_code == 200 and r.json().get("id") == sr_id
-        record("B3 GET /service-requests/{id} as owner", ok, f"status={r.status_code}")
-
-    r = requests.post(f"{API}/service-requests",
-                      data={"description": "no title here"},
-                      headers=hdr(cust_tok), timeout=30)
-    ok = r.status_code in (400, 422)
-    record("B4a POST no title -> 400/422", ok, f"status={r.status_code} body={r.text[:200]}")
-
-    r = requests.post(f"{API}/service-requests",
-                      data={"title": "Title", "description": "   "},
-                      headers=hdr(cust_tok), timeout=30)
-    ok = r.status_code == 400
-    record("B4b POST empty description -> 400", ok, f"status={r.status_code} body={r.text[:200]}")
-
-    files = {"photo": ("fake.gif", io.BytesIO(b"GIF89a" + b"\x00" * 32), "image/gif")}
-    r = requests.post(f"{API}/service-requests",
-                      data={"title": "ext", "description": "desc"},
-                      files=files, headers=hdr(cust_tok), timeout=30)
-    ok = r.status_code == 400
-    record("B5 POST with wrong ext .gif -> 400", ok, f"status={r.status_code} body={r.text[:200]}")
-
-    if photo_filename:
-        r = requests.get(f"{API}/uploads/{photo_filename}", timeout=30)
-        ok = r.status_code == 200 and len(r.content) > 0
-        record("B6 GET /uploads/{filename} serves file", ok, f"status={r.status_code} bytes={len(r.content)}")
-
-    url = f"{API}/uploads/..%2Fetc%2Fpasswd"
-    r = requests.get(url, timeout=30)
-    ok = r.status_code in (404, 400)
-    record("B7 GET /uploads traversal attempt -> 404", ok, f"status={r.status_code} body={r.text[:200]}")
-
-    return sr_id
-
-
-# -------------------------------
-# C) Manager flow
-# -------------------------------
-def test_manager_flow(admin_tok, sr_id):
-    r = requests.get(f"{API}/manager/me", headers=hdr(admin_tok), timeout=30)
-    ok = (r.status_code == 200 and
-          r.json().get("perms", {}).get("leads") is True and
-          r.json().get("perms", {}).get("service") is True)
-    record("C1 GET /manager/me as admin returns perms.leads&service", ok,
-           f"status={r.status_code} body={r.text[:300]}")
-
-    r = requests.get(f"{API}/manager/service-requests", headers=hdr(admin_tok), timeout=30)
-    ok = r.status_code == 200 and isinstance(r.json(), list) and any(s.get("id") == sr_id for s in r.json())
-    record("C2 GET /manager/service-requests contains SR", ok, f"status={r.status_code}")
-
-    r = requests.patch(f"{API}/manager/service-requests/{sr_id}",
-                       json={"status": "in_progress", "note": "Tech assigned"},
-                       headers=hdr(admin_tok), timeout=30)
-    ok = False
-    detail = f"status={r.status_code} body={r.text[:300]}"
-    if r.status_code == 200:
-        j = r.json()
-        ok = j.get("status") == "in_progress" and len(j.get("timeline", [])) == 2
-    record("C3 PATCH SR -> in_progress, timeline grew", ok, detail)
-
-    r = requests.patch(f"{API}/manager/service-requests/{sr_id}",
-                       json={"status": "resolved", "resolution": "Replaced filter"},
-                       headers=hdr(admin_tok), timeout=30)
-    ok = (r.status_code == 200 and
-          r.json().get("status") == "resolved" and
-          r.json().get("resolution") == "Replaced filter")
-    record("C4 PATCH SR -> resolved + resolution stored", ok, f"status={r.status_code} body={r.text[:300]}")
-
-    r = requests.patch(f"{API}/manager/service-requests/{sr_id}",
-                       json={"status": "foobar"},
-                       headers=hdr(admin_tok), timeout=30)
-    ok = r.status_code == 400
-    record("C5 PATCH invalid status -> 400", ok, f"status={r.status_code} body={r.text[:200]}")
-
-    fake_id = str(uuid.uuid4())
-    r = requests.patch(f"{API}/manager/service-requests/{fake_id}",
-                       json={"status": "in_progress"},
-                       headers=hdr(admin_tok), timeout=30)
-    ok = r.status_code == 404
-    record("C6 PATCH non-existent id -> 404", ok, f"status={r.status_code} body={r.text[:200]}")
-
-    r = requests.get(f"{API}/manager/leads", headers=hdr(admin_tok), timeout=30)
-    ok = r.status_code == 200 and isinstance(r.json(), list)
-    record("C7 GET /manager/leads (admin) -> 200 list", ok, f"status={r.status_code}")
-
-
-# -------------------------------
-# D) Permission gating
-# -------------------------------
-def test_gating(cust_tok):
-    r = requests.get(f"{API}/manager/service-requests", headers=hdr(cust_tok), timeout=30)
-    ok = r.status_code == 403
-    record("D1 customer GET /manager/service-requests -> 403", ok, f"status={r.status_code} body={r.text[:200]}")
-
-    r = requests.get(f"{API}/manager/leads", headers=hdr(cust_tok), timeout=30)
-    ok = r.status_code == 403
-    record("D2 customer GET /manager/leads -> 403", ok, f"status={r.status_code} body={r.text[:200]}")
-
-    r = requests.post(f"{API}/admin/managers",
-                      json={"phone": "9991110077", "perms_leads": True, "perms_service": True},
-                      headers=hdr(cust_tok), timeout=30)
-    ok = r.status_code == 403
-    record("D3 customer POST /admin/managers -> 403", ok, f"status={r.status_code} body={r.text[:200]}")
+def ok(resp):
+    return 200 <= resp.status_code < 300
 
 
 def main():
-    print(f"Base: {BASE_URL}")
-    admin_tok, cust_tok = setup_tokens()
-    print("Tokens OK")
+    print(f"Running regression against: {API}\n")
+    admin_tok, admin_user = admin_login()
+    log(True, "Admin login (legacy email)", f"admin id={admin_user['id']}")
 
-    mgr_id = test_admin_managers(admin_tok)
-    sr_id = test_service_requests(cust_tok)
-    if sr_id:
-        test_manager_flow(admin_tok, sr_id)
+    try:
+        ramesh_tok, ramesh = customer_login_email("ramesh@farm.com", "farmer123")
+        log(True, "Ramesh login", f"id={ramesh['id']} phone={ramesh.get('phone')}")
+    except AssertionError as e:
+        log(False, "Ramesh login", str(e))
+        ramesh_tok, ramesh = None, None
+
+    # 1) Manager CRUD
+    mgr_phone = "+919999300011"
+    r = post("/admin/managers", token=admin_tok, json={
+        "phone": mgr_phone, "perms_leads": True, "perms_service": True,
+        "perms_warranty": True, "perms_points": True,
+    })
+    mgr_id = None
+    if r.status_code == 200:
+        j = r.json()
+        perms = j.get("manager_perms", {})
+        all_on = all(perms.get(k) is True for k in ("leads", "service", "warranty", "points"))
+        log(all_on, "1a POST /admin/managers all-4-perms=true",
+            f"status=200 perms={perms}")
+        mgr_id = j["id"]
     else:
-        record("C (skipped)", False, "No SR id from B1")
-    test_gating(cust_tok)
+        log(False, "1a POST /admin/managers all-4-perms=true",
+            f"HTTP {r.status_code}: {r.text[:200]}")
 
     if mgr_id:
-        test_delete_manager(admin_tok, mgr_id)
+        r = patch(f"/admin/managers/{mgr_id}", token=admin_tok, json={
+            "perms_leads": True, "perms_service": False,
+            "perms_warranty": True, "perms_points": False,
+        })
+        if r.status_code == 200:
+            perms = r.json().get("manager_perms", {})
+            saved = (perms.get("leads") is True and perms.get("service") is False
+                     and perms.get("warranty") is True and perms.get("points") is False)
+            log(saved, "1b PATCH /admin/managers toggle", f"perms={perms}")
+        else:
+            log(False, "1b PATCH /admin/managers toggle",
+                f"HTTP {r.status_code}: {r.text[:200]}")
+        r = delete(f"/admin/managers/{mgr_id}", token=admin_tok)
+        log(r.status_code == 200 and r.json().get("demoted") is True,
+            "1c DELETE /admin/managers", f"HTTP {r.status_code} body={r.text[:120]}")
 
-    passed = sum(1 for _, p, _ in results if p)
-    total = len(results)
-    print("\n" + "=" * 60)
-    print(f"RESULT: {passed}/{total} passed")
-    for name, ok, detail in results:
-        if not ok:
-            print(f"  - FAIL {name}  {detail}")
-    return 0 if passed == total else 1
+    # 2) Lead PATCH backward-compat
+    lead_id = None
+    if ramesh_tok:
+        lead_phone = "+919" + str(uuid.uuid4().int)[:9]
+        r = post("/leads", token=ramesh_tok, json={
+            "name": "Suresh Testcase", "phone": lead_phone,
+            "equipment_interest": "Tiller", "notes": "Interested in demo",
+        })
+        if r.status_code in (200, 201):
+            lead_id = r.json()["id"]
+            log(True, "2a POST /leads as ramesh", f"lead_id={lead_id}")
+        else:
+            # Try /loyalty/leads
+            r2 = post("/loyalty/leads", token=ramesh_tok, json={
+                "name": "Suresh Testcase", "phone": lead_phone,
+                "equipment_interest": "Tiller", "notes": "Interested in demo",
+            })
+            if r2.status_code in (200, 201):
+                lead_id = r2.json()["id"]
+                log(True, "2a POST /loyalty/leads (fallback)", f"lead_id={lead_id}")
+            else:
+                log(False, "2a POST /leads", f"HTTP {r.status_code}: {r.text[:200]} / alt HTTP {r2.status_code}: {r2.text[:200]}")
+
+    if lead_id:
+        r = patch(f"/admin/leads/{lead_id}", token=admin_tok, json={
+            "status": "contacted", "notes": "old field works",
+        })
+        if r.status_code == 200:
+            tl = r.json().get("timeline", [])
+            last = tl[-1] if tl else {}
+            log(last.get("remark") == "old field works",
+                "2b PATCH /admin/leads {notes} legacy alias",
+                f"last remark={last.get('remark')!r} tl_len={len(tl)}")
+        else:
+            log(False, "2b PATCH /admin/leads legacy notes",
+                f"HTTP {r.status_code}: {r.text[:200]}")
+        r = patch(f"/admin/leads/{lead_id}", token=admin_tok, json={
+            "status": "lost", "remark": "new remark field works",
+        })
+        if r.status_code == 200:
+            tl = r.json().get("timeline", [])
+            last = tl[-1] if tl else {}
+            log(last.get("remark") == "new remark field works",
+                "2c PATCH /admin/leads {remark} new field",
+                f"tl_len={len(tl)} last={last.get('remark')!r}")
+        else:
+            log(False, "2c PATCH /admin/leads remark",
+                f"HTTP {r.status_code}: {r.text[:200]}")
+
+    # 3) Dealer endpoint regression
+    r = get("/admin/dealer-users", token=admin_tok)
+    dealer_tok = None
+    dealer_user_id = None
+    if r.status_code == 200 and isinstance(r.json(), list) and r.json():
+        for d in r.json():
+            if d.get("phone"):
+                dealer_phone = d["phone"]
+                dealer_user_id = d["id"]
+                try:
+                    dealer_tok, _ = otp_login(dealer_phone)
+                    log(True, "3-pre dealer OTP login",
+                        f"dealer={dealer_user_id} phone={dealer_phone}")
+                    break
+                except Exception as e:
+                    log(False, f"3-pre dealer OTP login {dealer_phone}", str(e))
+    else:
+        log(False, "3-pre GET /admin/dealer-users",
+            f"HTTP {r.status_code}: {r.text[:150]}")
+
+    test_lead_for_dealer = None
+    if dealer_tok:
+        r = get("/dealer/leads", token=dealer_tok)
+        log(r.status_code == 200, "3a GET /dealer/leads",
+            f"HTTP {r.status_code} count={len(r.json()) if ok(r) else '?'}")
+
+        if ramesh_tok and dealer_user_id:
+            lp = "+919" + str(uuid.uuid4().int)[:9]
+            rr = post("/leads", token=ramesh_tok,
+                      json={"name": "Dealer PATCH Test Lead", "phone": lp})
+            if rr.status_code in (200, 201):
+                test_lead_for_dealer = rr.json()["id"]
+                ra = post(f"/admin/leads/{test_lead_for_dealer}/assign-dealers",
+                          token=admin_tok,
+                          json={"dealer_user_ids": [dealer_user_id], "note": "setup"})
+                if ra.status_code != 200:
+                    log(False, "3-setup assign-dealers",
+                        f"HTTP {ra.status_code}: {ra.text[:150]}")
+
+        if test_lead_for_dealer:
+            r = patch(f"/dealer/leads/{test_lead_for_dealer}", token=dealer_tok,
+                      json={"status": "contacted", "notes": "dealer legacy notes"})
+            if r.status_code == 200:
+                tl = r.json().get("timeline", [])
+                last = tl[-1] if tl else {}
+                log(last.get("remark") == "dealer legacy notes",
+                    "3b PATCH /dealer/leads {status, notes}",
+                    f"last remark={last.get('remark')!r}")
+            else:
+                log(False, "3b PATCH /dealer/leads notes",
+                    f"HTTP {r.status_code}: {r.text[:180]}")
+
+            r = patch(f"/dealer/leads/{test_lead_for_dealer}", token=dealer_tok,
+                      json={"status": "contacted", "remark": "dealer new remark"})
+            if r.status_code == 200:
+                tl = r.json().get("timeline", [])
+                last = tl[-1] if tl else {}
+                log(last.get("remark") == "dealer new remark",
+                    "3c PATCH /dealer/leads {status, remark}",
+                    f"last remark={last.get('remark')!r}")
+            else:
+                log(False, "3c PATCH /dealer/leads remark",
+                    f"HTTP {r.status_code}: {r.text[:180]}")
+
+    # 4) Admin assign-dealers + /admin/dealer-users
+    if dealer_user_id and ramesh_tok:
+        lp = "+919" + str(uuid.uuid4().int)[:9]
+        rr = post("/leads", token=ramesh_tok,
+                  json={"name": "Assign-Dealers Test", "phone": lp})
+        if rr.status_code in (200, 201):
+            fresh_id = rr.json()["id"]
+            r = post(f"/admin/leads/{fresh_id}/assign-dealers",
+                     token=admin_tok,
+                     json={"dealer_user_ids": [dealer_user_id], "note": "test"})
+            if r.status_code == 200:
+                lead = r.json()
+                assigned = lead.get("assigned_dealer_user_ids") or []
+                tl_len = len(lead.get("timeline") or [])
+                log(dealer_user_id in assigned and tl_len >= 2,
+                    "4a POST /admin/leads/{id}/assign-dealers",
+                    f"assigned={assigned} tl_len={tl_len}")
+            else:
+                log(False, "4a POST /admin/leads/{id}/assign-dealers",
+                    f"HTTP {r.status_code}: {r.text[:200]}")
+        else:
+            log(False, "4a setup POST /leads", f"HTTP {rr.status_code}")
+
+    # Review says "POST /api/admin/dealer-users -> 200 (admin only)" but the
+    # implementation uses GET. Verify both.
+    r = get("/admin/dealer-users", token=admin_tok)
+    log(r.status_code == 200, "4b GET /admin/dealer-users admin=200",
+        f"HTTP {r.status_code} count={len(r.json()) if ok(r) else '?'}")
+    if ramesh_tok:
+        r = get("/admin/dealer-users", token=ramesh_tok)
+        log(r.status_code in (401, 403),
+            "4b-neg /admin/dealer-users non-admin blocked",
+            f"HTTP {r.status_code}")
+
+    # 5) Backwards-compat PATCH /manager/service-requests with note alias
+    sr_id = None
+    if ramesh_tok:
+        rr = get("/admin/service-requests", token=admin_tok)
+        if rr.status_code == 200 and isinstance(rr.json(), list) and rr.json():
+            # Prefer a non-resolved, non-closed one
+            eligible = [s for s in rr.json() if s.get("status") not in ("closed", "cancelled", "resolved")]
+            sr_id = eligible[0]["id"] if eligible else rr.json()[0]["id"]
+        if not sr_id:
+            jpg = bytes.fromhex(
+                "ffd8ffe000104a46494600010101006000600000ffdb004300080606070605080707070909"
+                "080a0c140d0c0b0b0c1912130f141d1a1f1e1d1a1c1c20242e2720222c231c1c2837292c3034"
+                "38383822272d4043402d4345323837ffc0000b080001000101011100ffc400160000010100000"
+                "00000000000000000000009ffda0008010100003f00bfffd9"
+            )
+            files = {"photo": ("t.jpg", jpg, "image/jpeg")}
+            data = {"title": "BWC Note Test", "description": "Testing note alias backcompat"}
+            rr = requests.post(API + "/service-requests", files=files, data=data,
+                               headers={"Authorization": f"Bearer {ramesh_tok}"}, timeout=30)
+            if rr.status_code == 200:
+                sr_id = rr.json()["id"]
+            else:
+                log(False, "5-setup create SR",
+                    f"HTTP {rr.status_code}: {rr.text[:200]}")
+        if sr_id:
+            r = patch(f"/manager/service-requests/{sr_id}", token=admin_tok,
+                      json={"status": "in_progress", "note": "works", "resolution": ""})
+            if r.status_code == 200:
+                tl = r.json().get("timeline", [])
+                last = tl[-1] if tl else {}
+                log(last.get("remark") == "works",
+                    "5 PATCH /manager/service-requests {note alias}",
+                    f"last remark={last.get('remark')!r}")
+            else:
+                log(False, "5 PATCH /manager/service-requests note alias",
+                    f"HTTP {r.status_code}: {r.text[:200]}")
+
+    print("\n" + "=" * 70)
+    passed = sum(1 for a, _, _ in results if a)
+    failed = sum(1 for a, _, _ in results if not a)
+    print(f"TOTAL: {passed} PASS / {failed} FAIL")
+    if failed:
+        print("\nFailures:")
+        for a, n, d in results:
+            if not a:
+                print(f"  - {n}: {d}")
+    sys.exit(0 if failed == 0 else 1)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

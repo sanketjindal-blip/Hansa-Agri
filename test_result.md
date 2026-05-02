@@ -661,18 +661,36 @@ frontend:
 
   - agent: "testing"
     message: |
-      Retest for previously failing loyalty/admin-lead PATCH purchased — PASS (9/9, zero 5xx)
-      via /app/backend_test_retest.py after the fix in services/loyalty.py:116
-      (added `and lead.get('referrer_user_id')` guard).
-      1) POST /api/admin/leads {name:'Retest Caller', phone:'+919999000333',
-         manager_ids:[], all_managers:false} → 200; response has admin_created=True,
-         referrer_user_id='', assigned_manager_ids=[].
-      2) PATCH /api/admin/leads/{lead_id} {status:'purchased', notes:''} → **200**
-         (previously 400 "User not found"). status='purchased', points_awarded=0
-         (no payout — expected for admin-created lead with empty referrer).
-      3) Sanity of original referral payout path: logged in as ramesh@farm.com (customer),
-         posted a lead '+919877777701', admin marked purchased → response points_awarded=500,
-         ramesh /me/points balance 0→500 (delta +500). Referral flow intact.
-      4) GET /api/admin/leads confirms retest lead with status='purchased'.
-      Backend logs show 200s throughout, no 5xx. Task "Lead referral & loyalty points system"
-      set to working:true. No further backend retest required for this fix.
+      Quick regression after frontend-integration session — /app/backend_test.py
+      ALL 16 assertions PASS, zero 5xx.
+
+      1) Manager CRUD with 4 perms: POST /admin/managers {+919999300011,
+         leads/service/warranty/points=true} → 200 with all four perms true.
+         PATCH {leads:T, service:F, warranty:T, points:F} → 200 saved correctly.
+         DELETE → 200 {demoted:true}. PASS.
+      2) Lead PATCH backward-compat: ramesh POST /leads → 200. Admin PATCH
+         /admin/leads/{id} {status:"contacted", notes:"old field works"} → 200,
+         last timeline entry remark="old field works". PATCH {status:"lost",
+         remark:"new remark field works"} → 200, timeline grew to len=3 with
+         matching remark. Both `notes` (legacy alias) and `remark` (new) work.
+         PASS.
+      3) Dealer regression: GET /admin/dealer-users returned 2 dealer users;
+         logged in via OTP (pulled `code` field from otps collection).
+         GET /dealer/leads → 200 count=1. PATCH /dealer/leads/{id}
+         {status:"contacted", notes:...} → 200 remark set. PATCH
+         {status:"contacted", remark:...} → 200 remark updated. Both
+         notes/remark formats accepted. PASS.
+      4) Admin assign-dealers: POST /admin/leads/{id}/assign-dealers
+         {dealer_user_ids:[d1], note:"test"} → 200 with
+         assigned_dealer_user_ids=[d1], timeline_len=2. GET /admin/dealer-users
+         admin=200 (count=2), non-admin ramesh=403. Note: the review mentioned
+         "POST /api/admin/dealer-users" but the current implementation only has
+         GET (see routes/admin.py:349). GET works with proper admin gating;
+         confirm with main agent whether a POST variant was intended.
+      5) Backwards-compat: PATCH /manager/service-requests/{sr_id}
+         {status:"in_progress", note:"works", resolution:""} with admin token
+         → 200, last timeline entry remark="works" (note alias accepted via
+         ServiceUpdateIn schema). PASS.
+
+      No 5xx observed. No further backend retest required for these
+      assertions.

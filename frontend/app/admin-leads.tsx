@@ -35,6 +35,7 @@ export default function AdminLeads() {
 }
 
 function LeadsTab() {
+  const router = useRouter();
   const [filter, setFilter] = useState<Status | 'all'>('all');
   const [leads, setLeads] = useState<any[]>([]);
   const [managers, setManagers] = useState<any[]>([]);
@@ -176,7 +177,10 @@ function LeadsTab() {
               {l.points_awarded ? <Text style={styles.awardTag}>+{l.points_awarded} points awarded</Text> : null}
               <View style={styles.actions}>
                 <TouchableOpacity onPress={() => openAssign(l)} style={[styles.actBtn, { backgroundColor: '#E6F3FF', borderColor: '#0A84FF' }]}>
-                  <Text style={[styles.actLbl, { color: '#0A84FF' }]}>{l.assigned_manager_ids?.length ? 'Reassign' : 'Assign'}</Text>
+                  <Text style={[styles.actLbl, { color: '#0A84FF' }]}>{l.assigned_manager_ids?.length ? 'Reassign Mgr' : 'Assign Mgr'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => router.push({ pathname: '/admin-assign-dealer', params: { type: 'lead', id: l.id, label: `${l.name} (${l.phone})` } })} style={[styles.actBtn, { backgroundColor: '#FFF8E6', borderColor: theme.colors.primary }]}>
+                  <Text style={[styles.actLbl, { color: theme.colors.primary }]}>{l.assigned_dealer_user_ids?.length ? 'Reassign Dealer' : 'Assign Dealer'}</Text>
                 </TouchableOpacity>
                 {STATUSES.filter(s => s !== l.status).map(s => (
                   <TouchableOpacity key={s} onPress={() => updateStatus(l, s)} style={[styles.actBtn, s === 'purchased' && { backgroundColor: '#E6F7E9', borderColor: '#34C759' }]}>
