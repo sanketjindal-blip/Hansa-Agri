@@ -56,9 +56,14 @@ async def require_admin(user=Depends(get_current_user)):
 
 
 async def require_dealer(user=Depends(get_current_user)):
-    if user.get("role") not in ("dealer", "admin"):
-        raise HTTPException(status_code=403, detail="Dealer or admin required")
-    return user
+    """Allows: dealer, admin, OR manager with `warranty` permission (so a
+    manager can use the same Dealer Portal UI to assign warranties)."""
+    role = user.get("role")
+    if role in ("dealer", "admin"):
+        return user
+    if role == "manager" and (user.get("manager_perms") or {}).get("warranty"):
+        return user
+    raise HTTPException(status_code=403, detail="Dealer / warranty-manager / admin required")
 
 
 async def require_manager_leads(user=Depends(get_current_user)):
@@ -77,3 +82,32 @@ async def require_manager_service(user=Depends(get_current_user)):
     if role == "manager" and (user.get("manager_perms") or {}).get("service"):
         return user
     raise HTTPException(status_code=403, detail="Service management permission required")
+
+
+async def require_manager_warranty(user=Depends(get_current_user)):
+    role = user.get("role")
+    if role == "admin":
+        return user
+    if role == "manager" and (user.get("manager_perms") or {}).get("warranty"):
+        return user
+    raise HTTPException(status_code=403, detail="Warranty management permission required")
+
+
+async def require_manager_points(user=Depends(get_current_user)):
+    role = user.get("role")
+    if role == "admin":
+        return user
+    if role == "manager" and (user.get("manager_perms") or {}).get("points"):
+        return user
+    raise HTTPException(status_code=403, detail="Points management permission required")
+
+
+async def require_dealer_or_assignee(user=Depends(get_current_user)):
+    """Dealer-portal dashboard endpoints. Allows dealer, admin, or manager
+    with warranty perm."""
+    role = user.get("role")
+    if role in ("dealer", "admin"):
+        return user
+    if role == "manager" and (user.get("manager_perms") or {}).get("warranty"):
+        return user
+    raise HTTPException(status_code=403, detail="Dealer access required")

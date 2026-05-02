@@ -58,7 +58,8 @@ class LeadIn(BaseModel):
 
 class LeadStatusIn(BaseModel):
     status: str  # new | contacted | purchased | lost
-    notes: Optional[str] = ""
+    remark: Optional[str] = ""
+    notes: Optional[str] = ""  # legacy alias for remark
 
 
 class PointsAdjustIn(BaseModel):
@@ -169,16 +170,28 @@ class ManagerPromoteIn(BaseModel):
     name: Optional[str] = None
     perms_leads: bool = True
     perms_service: bool = True
+    perms_warranty: bool = False
+    perms_points: bool = False
 
 
 class ManagerPermsIn(BaseModel):
     perms_leads: bool
     perms_service: bool
+    perms_warranty: bool = False
+    perms_points: bool = False
+
+
+class AssignDealersIn(BaseModel):
+    """Body for assign-to-dealer endpoints (leads / service requests)."""
+    dealer_user_ids: List[str] = []  # user.id of users with role=dealer
+    all_dealers: bool = False
+    note: Optional[str] = ""
 
 
 class ServiceUpdateIn(BaseModel):
     status: str  # open | in_progress | resolved | closed | cancelled
-    note: Optional[str] = ""
+    note: Optional[str] = ""  # legacy alias
+    remark: Optional[str] = ""
     resolution: Optional[str] = ""
 
 

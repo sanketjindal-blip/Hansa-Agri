@@ -10,7 +10,7 @@ from models.schemas import (
     AdminProductIn, AdminNewsIn, AdminOfferIn, DealerIn, CompanyIn,
     DealerLoginIn, LeadStatusIn, PointsAdjustIn, CategoryIn,
     CategoryReorderIn, MultiAssignWarrantyIn, ManagerPromoteIn, ManagerPermsIn,
-    AssignManagersIn, AdminLeadIn,
+    AssignManagersIn, AdminLeadIn, AssignDealersIn,
 )
 from services.warranty import assign_warranty as _assign_warranty
 from services import loyalty, notifications
@@ -198,7 +198,7 @@ async def list_leads(status: str | None = None, user=Depends(require_admin)):
 @router.patch("/leads/{lead_id}")
 async def update_lead(lead_id: str, body: LeadStatusIn, user=Depends(require_admin)):
     try:
-        return await loyalty.update_lead_status(lead_id, body.status, body.notes or "", user)
+        return await loyalty.update_lead_status(lead_id, body.status, body.remark or body.notes or "", user)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -337,6 +337,108 @@ async def assign_service_request(sr_id: str, body: AssignManagersIn, user=Depend
     return await db.service_requests.find_one({"id": sr_id}, {"_id": 0})
 
 
+# ---- Dealer Assignment (leads + service requests) ----
+async def _resolve_dealers(body: AssignDealersIn) -> list[str]:
+    if body.all_dealers:
+        cursor = db.users.find({"role": "dealer"}, {"_id": 0, "id": 1})
+        items = await cursor.to_list(500)
+        return [u["id"] for u in items]
+    return [d for d in (body.dealer_user_ids or []) if d]
+
+
+@router.get("/dealer-users")
+async def list_dealer_users(user=Depends(require_admin)):
+    """Returns users with role=dealer (so admin can pick them in the
+    Assign-to-Dealers UI). Joined with dealer profile for name/region."""
+    items = await db.users.find(
+        {"role": "dealer"}, {"_id": 0, "password_hash": 0}
+    ).to_list(500)
+    # Hydrate dealer profile for friendly display
+    for u in items:
+        if u.get("dealer_id"):
+            d = await db.dealers.find_one({"id": u["dealer_id"]}, {"_id": 0})
+            if d:
+                u["dealer_profile"] = {"name": d.get("name"), "city": d.get("city")}
+    return items
+
+
+@router.post("/leads/{lead_id}/assign-dealers")
+async def assign_lead_dealers(lead_id: str, body: AssignDealersIn, user=Depends(require_admin)):
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    target_ids = await _resolve_dealers(body)
+    timeline_entry = {
+        "at": datetime.now(timezone.utc).isoformat(),
+        "by": user["id"], "by_name": user.get("name") or "",
+        "role": "admin",
+        "action": "assigned_to_dealers" + (" (all)" if body.all_dealers else f" ({len(target_ids)})"),
+        "remark": body.note or "",
+    }
+    await db.leads.update_one(
+        {"id": lead_id},
+        {"$set": {"assigned_dealer_user_ids": target_ids,
+                  "updated_at": datetime.now(timezone.utc).isoformat()},
+         "$push": {"timeline": timeline_entry}},
+    )
+    if target_ids:
+        sms_text = (
+            f"HANSA: Lead assigned. {lead['name']} ({lead['phone']})"
+            + (f" - interested in {lead.get('equipment_interest','')}" if lead.get('equipment_interest') else "")
+            + (f". Note: {body.note}" if body.note else "")
+        )
+        await notifications.notify_users(
+            target_ids,
+            title="New lead assigned",
+            body=f"{lead['name']} - {lead['phone']}" + (f" - {body.note}" if body.note else ""),
+            ntype="lead_assigned",
+            ref_type="lead",
+            ref_id=lead_id,
+            sms=True,
+            sms_message=sms_text,
+        )
+    return await db.leads.find_one({"id": lead_id}, {"_id": 0})
+
+
+@router.post("/service-requests/{sr_id}/assign-dealers")
+async def assign_sr_dealers(sr_id: str, body: AssignDealersIn, user=Depends(require_admin)):
+    sr = await db.service_requests.find_one({"id": sr_id}, {"_id": 0})
+    if not sr:
+        raise HTTPException(status_code=404, detail="Service request not found")
+    target_ids = await _resolve_dealers(body)
+    timeline_entry = {
+        "at": datetime.now(timezone.utc).isoformat(),
+        "by": user["id"], "by_name": user.get("name") or "",
+        "role": "admin",
+        "action": "assigned_to_dealers" + (" (all)" if body.all_dealers else f" ({len(target_ids)})"),
+        "remark": body.note or "",
+    }
+    await db.service_requests.update_one(
+        {"id": sr_id},
+        {"$set": {"assigned_dealer_user_ids": target_ids,
+                  "updated_at": datetime.now(timezone.utc).isoformat()},
+         "$push": {"timeline": timeline_entry}},
+    )
+    if target_ids:
+        sms_text = (
+            f"HANSA: Service ticket assigned. {sr.get('title') or 'Service Request'} "
+            f"- {sr.get('customer_name') or sr.get('customer_phone','')}"
+            + (f". Note: {body.note}" if body.note else "")
+        )
+        await notifications.notify_users(
+            target_ids,
+            title="Service ticket assigned to you",
+            body=f"{sr.get('title') or 'Service Request'} - {sr.get('customer_name') or ''} ({sr.get('customer_phone','')})"
+                 + (f" - {body.note}" if body.note else ""),
+            ntype="service_assigned",
+            ref_type="service_request",
+            ref_id=sr_id,
+            sms=True,
+            sms_message=sms_text,
+        )
+    return await db.service_requests.find_one({"id": sr_id}, {"_id": 0})
+
+
 # ---- Users & Points (admin) ----
 @router.get("/users")
 async def list_users(q: str | None = None, user=Depends(require_admin)):
@@ -451,8 +553,13 @@ async def promote_manager(body: ManagerPromoteIn, user=Depends(require_admin)):
     phone = normalize_phone(body.phone)
     if not phone or len(phone) < 12:
         raise HTTPException(status_code=400, detail="Invalid phone")
-    perms = {"leads": bool(body.perms_leads), "service": bool(body.perms_service)}
-    if not perms["leads"] and not perms["service"]:
+    perms = {
+        "leads": bool(body.perms_leads),
+        "service": bool(body.perms_service),
+        "warranty": bool(body.perms_warranty),
+        "points": bool(body.perms_points),
+    }
+    if not any(perms.values()):
         raise HTTPException(status_code=400, detail="At least one permission must be enabled")
     existing = await db.users.find_one({"phone": phone})
     if existing:
@@ -475,11 +582,7 @@ async def promote_manager(body: ManagerPromoteIn, user=Depends(require_admin)):
         })
     try:
         from sms import send_sms
-        roles = []
-        if perms["leads"]:
-            roles.append("Leads")
-        if perms["service"]:
-            roles.append("Service")
+        roles = [k.title() for k, v in perms.items() if v]
         send_sms(
             phone,
             f"HANSA: You are now a manager. Modules: {', '.join(roles)}. "
@@ -493,11 +596,17 @@ async def promote_manager(body: ManagerPromoteIn, user=Depends(require_admin)):
 
 @router.patch("/managers/{user_id}")
 async def update_manager_perms(user_id: str, body: ManagerPermsIn, user=Depends(require_admin)):
-    if not body.perms_leads and not body.perms_service:
+    perms = {
+        "leads": bool(body.perms_leads),
+        "service": bool(body.perms_service),
+        "warranty": bool(body.perms_warranty),
+        "points": bool(body.perms_points),
+    }
+    if not any(perms.values()):
         raise HTTPException(status_code=400, detail="At least one permission must be enabled")
     res = await db.users.update_one(
         {"id": user_id, "role": "manager"},
-        {"$set": {"manager_perms": {"leads": body.perms_leads, "service": body.perms_service}}},
+        {"$set": {"manager_perms": perms}},
     )
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Manager not found")

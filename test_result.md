@@ -609,6 +609,58 @@ frontend:
 
   - agent: "testing"
     message: |
+      "Remarks/timeline + dealer assignment + manager perms expansion" regression
+      via /app/backend_test_remarks.py against the public preview URL. RESULT:
+      **58 PASS / 0 FAIL, zero 5xx**.
+
+      A) Manager perms expansion (PASS): POST /admin/managers with all 4 perms
+         (leads/service/warranty/points=true) -> 200; response.manager_perms has
+         all 4 keys=true. PATCH to {leads:T, service:F, warranty:F, points:F} ->
+         200 perms updated. PATCH all-false -> 400 "At least one permission must
+         be enabled". Restored to all 4 true.
+      B) Dealer-assigned leads + SRs (PASS): GET /admin/dealer-users returned 2
+         dealer users (d1, d2). Customer ramesh POST /leads created referral
+         lead. Admin POST /admin/leads/{id}/assign-dealers {[d1], note} ->
+         assigned_dealer_user_ids=[d1], timeline got entry with action=
+         "assigned_to_dealers (1)" + remark="Please call ASAP", d1 received
+         in-app notification type=lead_assigned ref_id=lead_id. Re-POST with
+         all_dealers=true assigned BOTH dealer ids. SR with title="Hydraulic
+         leak"+jpg created; admin assign-dealers to d1 with note=Onsite check
+         -> SR timeline grew, d1 notified type=service_assigned. Empty
+         dealer_user_ids+all_dealers:false -> 200 with assigned_dealer_user_ids
+         =[] (cleared), no new notif sent.
+      C) Dealer endpoints (PASS): logged in as actual dealer d1 via OTP.
+         GET /dealer/leads contained the assigned lead. PATCH /dealer/leads/{id}
+         {status:contacted, remark} -> status=contacted, last timeline entry
+         has remark + action="status: new → contacted". PATCH to purchased with
+         remark="Bought tiller" -> ramesh balance went 500 → 1000 (+500
+         referral payout) and timeline entry recorded. GET /dealer/service-
+         requests contained SR; PATCH {status:in_progress, remark:"Tech on the
+         way"} -> SR.status=in_progress, timeline grew, ramesh got
+         service_status in-app notification. Negative: dealer PATCHing a lead
+         not assigned to them -> 404 "Lead not assigned to you".
+      D) Manager warranty + points (PASS): logged in as M-All manager via OTP.
+         POST /manager/assign-warranty (1 product, customer +919998880050) ->
+         200; the inserted order has assigned_by_dealer == manager.id (the
+         service code uses 'assigned_by_dealer' for non-admin actors). POST
+         /manager/points/adjust {user_id:ramesh, delta:+25, reason:"Manual
+         award"} -> 200, new_balance == before+25 (1000 → 1025). Ramesh
+         received in-app notif type=points_adjust title="Reward Points
+         credited". Negative: PATCH M-All to remove perms_warranty, retry
+         /manager/assign-warranty -> 403 "Warranty management permission
+         required". Perms restored.
+      E) Admin lead PATCH with remark (PASS): admin creates lead, PATCHes
+         {status:contacted, remark:"Caller asked for more info"} -> 200;
+         timeline has entry with remark="Caller asked for more info" and
+         role="admin".
+      F) Cleanup (PASS): DELETE /admin/managers/{M-All_id} -> 200.
+
+      Backend logs clean throughout (no 5xx). All assertions in the review
+      request verified end-to-end. No further backend retest required for
+      this batch.
+
+  - agent: "testing"
+    message: |
       Retest for previously failing loyalty/admin-lead PATCH purchased — PASS (9/9, zero 5xx)
       via /app/backend_test_retest.py after the fix in services/loyalty.py:116
       (added `and lead.get('referrer_user_id')` guard).

@@ -77,6 +77,15 @@ async def create_lead(referrer: dict, name: str, phone: str,
         "notes": (notes or "").strip(),
         "status": "new",
         "points_awarded": 0,
+        "timeline": [{
+            "at": datetime.now(timezone.utc).isoformat(),
+            "by": referrer.get("id", ""),
+            "role": referrer.get("role", "customer"),
+            "action": "created",
+            "remark": (notes or "").strip() or "Lead submitted",
+        }],
+        "assigned_manager_ids": [],
+        "assigned_dealer_user_ids": [],
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -93,25 +102,37 @@ async def create_lead(referrer: dict, name: str, phone: str,
     return lead
 
 
-async def update_lead_status(lead_id: str, new_status: str, notes: str,
-                             admin: dict) -> dict:
+async def update_lead_status(lead_id: str, new_status: str, remark: str,
+                             actor: dict) -> dict:
     if new_status not in LEAD_STATUSES:
         raise ValueError(f"Invalid status. Must be one of {LEAD_STATUSES}")
     lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
     if not lead:
         raise ValueError("Lead not found")
+    prev_status = lead.get("status")
+    now = datetime.now(timezone.utc).isoformat()
     update = {
         "status": new_status,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-        "updated_by_admin": admin["id"],
+        "updated_at": now,
+        "updated_by": actor["id"],
     }
-    if notes:
-        update["notes"] = (lead.get("notes", "") + "\n[admin] " + notes).strip()
+    if remark:
+        existing_notes = lead.get("notes") or ""
+        actor_role = actor.get("role", "user")
+        update["notes"] = f"{existing_notes}\n[{actor_role}] {remark}".strip()
+    timeline_entry = {
+        "at": now,
+        "by": actor["id"],
+        "by_name": actor.get("name") or "",
+        "role": actor.get("role", "user"),
+        "action": f"status: {prev_status} \u2192 {new_status}",
+        "remark": remark or "",
+    }
     # Award points exactly once when transitioning into 'purchased'.
     # Skip the payout for admin-created leads (no referrer_user_id) — they're
     # tracked for sales pipeline only, not the referral programme.
     if (new_status == "purchased"
-            and lead.get("status") != "purchased"
+            and prev_status != "purchased"
             and not lead.get("points_awarded")
             and lead.get("referrer_user_id")):
         new_balance = await adjust_points(
@@ -121,7 +142,7 @@ async def update_lead_status(lead_id: str, new_status: str, notes: str,
             ref={"lead_id": lead_id},
         )
         update["points_awarded"] = LEAD_REWARD_POINTS
-        update["awarded_at"] = update["updated_at"]
+        update["awarded_at"] = now
         try:
             send_sms(
                 lead.get("referrer_phone", ""),
@@ -131,7 +152,30 @@ async def update_lead_status(lead_id: str, new_status: str, notes: str,
             )
         except Exception:
             pass
-    await db.leads.update_one({"id": lead_id}, {"$set": update})
+    await db.leads.update_one(
+        {"id": lead_id},
+        {"$set": update, "$push": {"timeline": timeline_entry}},
+    )
+    return await db.leads.find_one({"id": lead_id}, {"_id": 0})
+
+
+async def add_lead_remark(lead_id: str, remark: str, actor: dict) -> dict:
+    """Append a remark to a lead's timeline without changing status."""
+    if not remark or not remark.strip():
+        raise ValueError("Remark is required")
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise ValueError("Lead not found")
+    now = datetime.now(timezone.utc).isoformat()
+    entry = {
+        "at": now, "by": actor["id"], "by_name": actor.get("name") or "",
+        "role": actor.get("role", "user"), "action": "remark",
+        "remark": remark.strip(),
+    }
+    await db.leads.update_one(
+        {"id": lead_id},
+        {"$set": {"updated_at": now}, "$push": {"timeline": entry}},
+    )
     return await db.leads.find_one({"id": lead_id}, {"_id": 0})
 
 
