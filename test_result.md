@@ -162,14 +162,23 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus:
-    - "In-app notifications API"
-    - "Admin Service Request list + assign-to-manager"
-    - "Admin manual lead create + assign-to-manager"
-    - "Manager assignment-based filtering for leads & service-requests"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
+
+agent_communication:
+  - agent: "testing"
+    message: |
+      Inventory retest after schema fix — **15/15 PASS, zero 5xx**.
+      GET /api/admin/inventory/summary (admin) → 200 with correct shape:
+      totals.products matches DB count, by_category has 10 rows with
+      {id,name,key,icon,products_count,in_stock_count,out_of_stock_count,
+      avg_price,total_value,active}, name drawn from category.label, totals
+      arithmetic verified vs DB, _uncategorised correctly absent,
+      recent_products sorted by created_at desc, top_priced sorted by price
+      desc, out_of_stock present. Gating: customer → 403, unauth → 401.
+      Inventory endpoint cleared. No other backend tasks flagged for retest.
 
 agent_communication:
   - agent: "main"
@@ -427,12 +436,27 @@ backend:
 
   - task: "Admin Inventory summary endpoint"
     implemented: true
-    working: false
+    working: true
     file: "backend/routes/admin.py"
-    stuck_count: 1
+    stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          RETEST PASS after schema fix — 15/15 assertions via /app/inventory_retest.py.
+          GET /api/admin/inventory/summary as admin → 200 (no more 500). Response shape verified:
+          • totals.products==19 matches db.products count.
+          • by_category list has exactly 10 registered rows (one per seeded category), each with
+            {id, name, key, icon, products_count, in_stock_count, out_of_stock_count,
+            avg_price, total_value, active}.
+          • name populated from category.label for every row.
+          • For each non-empty category, total_value == sum(prices) and avg_price == total_value/products_count (verified against DB).
+          • _uncategorised bucket correctly absent (all product categories are in registered keys).
+          • recent_products sorted by created_at desc; top_priced sorted by price desc
+            ([245000,198000,185000,165000,115000]); out_of_stock array present.
+          Gating: customer token → 403; unauth → 401. Schema mismatch fix (c["name"] → c.get("key")/c.get("label")) confirmed.
       - working: false
         agent: "testing"
         comment: |

@@ -78,12 +78,16 @@ async def inventory_summary(user=Depends(require_admin)):
     out_stock_count = await db.products.count_documents({"in_stock": False})
 
     cats = await db.categories.find({}, {"_id": 0}).sort("sort_order", 1).to_list(200)
-    cat_names = {c.get("name") for c in cats}
+    # Categories have shape `{key, label, icon, ...}`. Products store the
+    # category KEY (e.g. "Tiller") in their `category` field.
+    cat_keys = {c.get("key") for c in cats if c.get("key")}
     by_category: list[dict] = []
     total_value = 0.0
     for c in cats:
+        key = c.get("key", "")
+        label = c.get("label") or key
         prods = await db.products.find(
-            {"category": c["name"]}, {"_id": 0, "price": 1, "in_stock": 1, "id": 1},
+            {"category": key}, {"_id": 0, "price": 1, "in_stock": 1, "id": 1},
         ).to_list(500)
         cnt = len(prods)
         sum_price = float(sum(p.get("price", 0) for p in prods))
@@ -91,7 +95,8 @@ async def inventory_summary(user=Depends(require_admin)):
         in_stock_n = sum(1 for p in prods if p.get("in_stock", True))
         by_category.append({
             "id": c.get("id"),
-            "name": c.get("name"),
+            "name": label,
+            "key": key,
             "icon": c.get("icon", "cube-outline"),
             "active": c.get("active", True),
             "products_count": cnt,
@@ -102,11 +107,11 @@ async def inventory_summary(user=Depends(require_admin)):
         })
         total_value += sum_price
 
-    # Uncategorised bucket (products whose category isn't in cat_names)
+    # Uncategorised bucket (products whose category isn't in cat_keys)
     other_prods = await db.products.find(
         {}, {"_id": 0, "category": 1, "price": 1, "in_stock": 1},
     ).to_list(500)
-    uncategorised = [p for p in other_prods if p.get("category") not in cat_names]
+    uncategorised = [p for p in other_prods if p.get("category") not in cat_keys]
     if uncategorised:
         u_sum = float(sum(p.get("price", 0) for p in uncategorised))
         u_in = sum(1 for p in uncategorised if p.get("in_stock", True))
