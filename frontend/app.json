@@ -1,8 +1,9 @@
 {
   "expo": {
-    "name": "frontend",
+    "name": "HANSA Agriculture",
     "slug": "frontend",
     "version": "1.0.0",
+    "description": "HANSA — Agriculture machinery, warranty tracking, dealer locator and rewards in one app.",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "frontend",
@@ -21,7 +22,15 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "name": "HANSA Agriculture",
+      "shortName": "HANSA",
+      "lang": "en",
+      "themeColor": "#F2A900",
+      "backgroundColor": "#1F2937",
+      "display": "standalone",
+      "orientation": "any",
+      "description": "HANSA — Agriculture machinery, warranty tracking, dealer locator and rewards."
     },
     "plugins": [
       "expo-router",
