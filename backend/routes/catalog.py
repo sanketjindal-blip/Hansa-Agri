@@ -14,7 +14,7 @@ async def list_products(category: Optional[str] = None, q: Optional[str] = None)
         query["category"] = category
     if q:
         query["name"] = {"$regex": q, "$options": "i"}
-    items = await db.products.find(query, {"_id": 0}).to_list(500)
+    items = await db.products.find(query, {"_id": 0}).sort([("sort_order", 1), ("created_at", -1)]).to_list(500)
     return items
 
 

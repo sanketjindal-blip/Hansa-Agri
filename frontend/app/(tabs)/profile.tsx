@@ -40,6 +40,7 @@ export default function Profile() {
       { icon: 'briefcase-outline', label: 'Manager Dashboard (all modules)', onPress: () => router.push('/manager') },
       { icon: 'construct-outline', label: t('admin_dashboard'), onPress: () => router.push('/admin') },
       { icon: 'cube-outline', label: 'Manage Products', onPress: () => router.push('/admin-products') },
+      { icon: 'bar-chart-outline', label: 'Inventory Dashboard', onPress: () => router.push('/admin-inventory') },
       { icon: 'apps-outline', label: 'Manage Categories', onPress: () => router.push('/admin-categories') },
       { icon: 'people-outline', label: 'Leads & Points', onPress: () => router.push('/admin-leads') },
       { icon: 'build-outline', label: 'Service Requests', onPress: () => router.push('/admin-service-requests') },

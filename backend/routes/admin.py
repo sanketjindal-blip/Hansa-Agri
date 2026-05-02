@@ -53,6 +53,96 @@ async def update_product(product_id: str, body: AdminProductIn, user=Depends(req
     return p
 
 
+# ---- Product Reorder (drag-to-reorder) ----
+@router.post("/products/reorder")
+async def reorder_products(body: dict, user=Depends(require_admin)):
+    ordered_ids = body.get("ordered_ids") or []
+    for idx, pid in enumerate(ordered_ids):
+        await db.products.update_one(
+            {"id": pid}, {"$set": {"sort_order": (idx + 1) * 10}},
+        )
+    items = await db.products.find({}, {"_id": 0}).sort([("sort_order", 1), ("created_at", -1)]).to_list(500)
+    return items
+
+
+# ---- Inventory Dashboard ----
+@router.get("/inventory/summary")
+async def inventory_summary(user=Depends(require_admin)):
+    """Aggregated inventory metrics. Counts products per configured category,
+    plus 'Uncategorised' bucket for products whose category-string doesn't
+    match any registered category."""
+    total_products = await db.products.count_documents({})
+    total_active_categories = await db.categories.count_documents({"active": {"$ne": False}})
+    featured_count = await db.products.count_documents({"featured": True})
+    in_stock_count = await db.products.count_documents({"in_stock": True})
+    out_stock_count = await db.products.count_documents({"in_stock": False})
+
+    cats = await db.categories.find({}, {"_id": 0}).sort("sort_order", 1).to_list(200)
+    cat_names = {c.get("name") for c in cats}
+    by_category: list[dict] = []
+    total_value = 0.0
+    for c in cats:
+        prods = await db.products.find(
+            {"category": c["name"]}, {"_id": 0, "price": 1, "in_stock": 1, "id": 1},
+        ).to_list(500)
+        cnt = len(prods)
+        sum_price = float(sum(p.get("price", 0) for p in prods))
+        avg_price = sum_price / cnt if cnt else 0.0
+        in_stock_n = sum(1 for p in prods if p.get("in_stock", True))
+        by_category.append({
+            "id": c.get("id"),
+            "name": c.get("name"),
+            "icon": c.get("icon", "cube-outline"),
+            "active": c.get("active", True),
+            "products_count": cnt,
+            "in_stock_count": in_stock_n,
+            "out_of_stock_count": cnt - in_stock_n,
+            "avg_price": round(avg_price, 2),
+            "total_value": round(sum_price, 2),
+        })
+        total_value += sum_price
+
+    # Uncategorised bucket (products whose category isn't in cat_names)
+    other_prods = await db.products.find(
+        {}, {"_id": 0, "category": 1, "price": 1, "in_stock": 1},
+    ).to_list(500)
+    uncategorised = [p for p in other_prods if p.get("category") not in cat_names]
+    if uncategorised:
+        u_sum = float(sum(p.get("price", 0) for p in uncategorised))
+        u_in = sum(1 for p in uncategorised if p.get("in_stock", True))
+        by_category.append({
+            "id": "_uncategorised",
+            "name": "Uncategorised",
+            "icon": "help-circle-outline",
+            "active": True,
+            "products_count": len(uncategorised),
+            "in_stock_count": u_in,
+            "out_of_stock_count": len(uncategorised) - u_in,
+            "avg_price": round(u_sum / len(uncategorised), 2) if uncategorised else 0,
+            "total_value": round(u_sum, 2),
+        })
+        total_value += u_sum
+
+    recent = await db.products.find({}, {"_id": 0}).sort([("created_at", -1)]).to_list(8)
+    top_priced = await db.products.find({}, {"_id": 0}).sort([("price", -1)]).to_list(5)
+    out_of_stock = await db.products.find({"in_stock": False}, {"_id": 0}).to_list(20)
+
+    return {
+        "totals": {
+            "products": total_products,
+            "categories": total_active_categories,
+            "featured": featured_count,
+            "in_stock": in_stock_count,
+            "out_of_stock": out_stock_count,
+            "total_value_inr": round(total_value, 2),
+        },
+        "by_category": by_category,
+        "recent_products": recent,
+        "top_priced": top_priced,
+        "out_of_stock": out_of_stock,
+    }
+
+
 # ---- News & Offers ----
 @router.post("/news")
 async def create_news(body: AdminNewsIn, user=Depends(require_admin)):

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Video, ResizeMode } from 'expo-av';
+import VideoPlayer from '../src/components/VideoPlayer';
 import { api, formatApiError, absoluteUrl } from '../src/api';
 import { theme } from '../src/theme';
 import { safeBack } from '../src/nav';
@@ -153,7 +153,7 @@ export default function AdminServiceRequests() {
               <Text style={styles.modalSub}>{target?.customer_name} · {target?.customer_phone}{target?.product_name ? '  ·  ' + target.product_name : ''}</Text>
               <Text style={styles.desc}>{target?.description}</Text>
               {!!target?.photo && <Image source={{ uri: absoluteUrl(target.photo.url) }} style={styles.fullImg} />}
-              {!!target?.video && <Video source={{ uri: absoluteUrl(target.video.url)! }} style={styles.fullVideo} useNativeControls resizeMode={ResizeMode.CONTAIN} />}
+              {!!target?.video && <VideoPlayer uri={absoluteUrl(target.video.url)!} style={styles.fullVideo} />}
 
               <Text style={styles.field}>Assign to</Text>
               <TouchableOpacity onPress={() => { setAllMgrs(v => !v); if (!allMgrs) setSelectedMgrs([]); }} style={styles.allMgrBtn}>

@@ -1,7 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, FlatList, Image, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Modal } from 'react-native';
+import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { api, formatApiError, absoluteUrl } from '../src/api';
 import { useAuth } from '../src/AuthContext';
@@ -21,6 +24,7 @@ const EMPTY: FormState = {
 };
 
 export default function AdminProducts() {
+  const router = useRouter();
   const { user } = useAuth();
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
@@ -128,7 +132,15 @@ export default function AdminProducts() {
     } catch (e: any) { Alert.alert('Error', formatApiError(e)); }
   };
 
+  const onReorder = async (data: any[]) => {
+    setProducts(data);
+    try {
+      await api.post('/admin/products/reorder', { ordered_ids: data.map(p => p.id) });
+    } catch (e: any) { Alert.alert('Reorder failed', formatApiError(e)); await load(); }
+  };
+
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity testID="ap-back" onPress={() => safeBack()}><Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} /></TouchableOpacity>
@@ -136,29 +148,40 @@ export default function AdminProducts() {
         <TouchableOpacity testID="ap-new" onPress={openNew}><Ionicons name="add-circle" size={28} color={theme.colors.primary} /></TouchableOpacity>
       </View>
 
-      <TouchableOpacity testID="send-reminders" style={styles.reminderBtn} onPress={sendReminders}>
-        <Ionicons name="notifications" size={16} color="#fff" />
-        <Text style={styles.reminderTxt}>Send warranty SMS reminders</Text>
-      </TouchableOpacity>
+      <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16 }}>
+        <TouchableOpacity testID="open-inventory" style={[styles.reminderBtn, { flex: 1, backgroundColor: '#0A84FF' }]} onPress={() => router.push('/admin-inventory')}>
+          <Ionicons name="bar-chart" size={16} color="#fff" />
+          <Text style={styles.reminderTxt}>Inventory Dashboard</Text>
+        </TouchableOpacity>
+        <TouchableOpacity testID="send-reminders" style={[styles.reminderBtn, { flex: 1 }]} onPress={sendReminders}>
+          <Ionicons name="notifications" size={16} color="#fff" />
+          <Text style={styles.reminderTxt}>Warranty SMS</Text>
+        </TouchableOpacity>
+      </View>
+      <Text style={styles.dragHint}>Long-press a card to drag and reorder.</Text>
 
       {loading ? <ActivityIndicator color={theme.colors.primary} style={{ marginTop: 40 }} /> : (
-        <FlatList
+        <DraggableFlatList
           data={products}
           keyExtractor={(p) => p.id}
+          onDragEnd={({ data }) => onReorder(data)}
           contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: 40 }}
-          renderItem={({ item }) => (
-            <View style={styles.pCard}>
-              <Image source={{ uri: absoluteUrl(item.image) || item.image }} style={styles.pImg} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.pCat}>{item.category}{item.featured ? ' · ★ Featured' : ''}</Text>
-                <Text style={styles.pName} numberOfLines={2}>{item.name}</Text>
-                <Text style={styles.pPrice}>{formatINR(item.price)}</Text>
-              </View>
-              <View style={{ gap: 6 }}>
-                <TouchableOpacity testID={`edit-${item.id}`} onPress={() => openEdit(item)} style={[styles.iconBtn, { backgroundColor: '#FFF4EA' }]}><Ionicons name="create-outline" size={18} color={theme.colors.primary} /></TouchableOpacity>
-                <TouchableOpacity testID={`del-${item.id}`} onPress={() => del(item)} style={[styles.iconBtn, { backgroundColor: '#FDE8E8' }]}><Ionicons name="trash-outline" size={18} color={theme.colors.danger} /></TouchableOpacity>
-              </View>
-            </View>
+          renderItem={({ item, drag, isActive }: any) => (
+            <ScaleDecorator>
+              <TouchableOpacity onLongPress={drag} disabled={isActive} activeOpacity={0.85} style={[styles.pCard, isActive && { backgroundColor: '#FFFBEA' }]}>
+                <Ionicons name="reorder-three" size={20} color={theme.colors.textMuted} />
+                <Image source={{ uri: absoluteUrl(item.image) || item.image }} style={styles.pImg} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.pCat}>{item.category}{item.featured ? ' · ★ Featured' : ''}</Text>
+                  <Text style={styles.pName} numberOfLines={2}>{item.name}</Text>
+                  <Text style={styles.pPrice}>{formatINR(item.price)}</Text>
+                </View>
+                <View style={{ gap: 6 }}>
+                  <TouchableOpacity testID={`edit-${item.id}`} onPress={() => openEdit(item)} style={[styles.iconBtn, { backgroundColor: '#FFF4EA' }]}><Ionicons name="create-outline" size={18} color={theme.colors.primary} /></TouchableOpacity>
+                  <TouchableOpacity testID={`del-${item.id}`} onPress={() => del(item)} style={[styles.iconBtn, { backgroundColor: '#FDE8E8' }]}><Ionicons name="trash-outline" size={18} color={theme.colors.danger} /></TouchableOpacity>
+                </View>
+              </TouchableOpacity>
+            </ScaleDecorator>
           )}
         />
       )}
@@ -221,6 +244,7 @@ export default function AdminProducts() {
         </SafeAreaView>
       </Modal>
     </SafeAreaView>
+    </GestureHandlerRootView>
   );
 }
 
@@ -228,8 +252,9 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16 },
   title: { fontSize: 18, fontWeight: '700', color: theme.colors.textPrimary },
-  reminderBtn: { flexDirection: 'row', marginHorizontal: 16, backgroundColor: theme.colors.secondary, padding: 12, borderRadius: 12, gap: 8, alignItems: 'center', justifyContent: 'center' },
-  reminderTxt: { color: '#fff', fontWeight: '700' },
+  reminderBtn: { flexDirection: 'row', backgroundColor: theme.colors.secondary, padding: 12, borderRadius: 12, gap: 6, alignItems: 'center', justifyContent: 'center' },
+  reminderTxt: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  dragHint: { fontSize: 11, color: theme.colors.textMuted, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4, fontStyle: 'italic' },
   pCard: { flexDirection: 'row', gap: 10, backgroundColor: '#fff', padding: 10, borderRadius: 12, borderWidth: 1, borderColor: theme.colors.border, alignItems: 'center' },
   pImg: { width: 56, height: 56, borderRadius: 8 },
   pCat: { fontSize: 10, color: theme.colors.secondary, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' },

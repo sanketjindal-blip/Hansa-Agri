@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { Video, ResizeMode } from 'expo-av';
+import VideoPlayer from '../src/components/VideoPlayer';
 import { api, formatApiError } from '../src/api';
 import { theme } from '../src/theme';
 
@@ -142,7 +142,7 @@ export default function ServiceRequest() {
             <Text style={styles.lbl}>Video (optional, max 30 MB / 60s)</Text>
             {media.find(m => m.type === 'video') ? (
               <View style={styles.mediaWrap}>
-                <Video source={{ uri: media.find(m => m.type === 'video')!.uri }} style={styles.videoPreview} useNativeControls resizeMode={ResizeMode.COVER} isLooping={false} />
+                <VideoPlayer uri={media.find(m => m.type === 'video')!.uri} style={styles.videoPreview} contentFit="cover" />
                 <TouchableOpacity onPress={() => removeMedia('video')} style={styles.removeBtn}><Ionicons name="close-circle" size={28} color={theme.colors.danger} /></TouchableOpacity>
               </View>
             ) : (

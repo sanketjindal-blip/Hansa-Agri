@@ -425,6 +425,62 @@ backend:
     priority: "high"
     needs_retesting: true
 
+  - task: "Admin Inventory summary endpoint"
+    implemented: true
+    working: false
+    file: "backend/routes/admin.py"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: false
+        agent: "testing"
+        comment: |
+          GET /api/admin/inventory/summary returns **500 Internal Server Error**.
+          Backend traceback (in /var/log/supervisor/backend.err.log):
+            File "/app/backend/routes/admin.py", line 86, in inventory_summary
+              {"category": c["name"]}, {"_id": 0, "price": 1, "in_stock": 1, "id": 1},
+                           ~^^^^^^^^
+            KeyError: 'name'
+          Root cause: the `categories` collection has fields {id, key, label, icon,
+          sort_order, active} — there is NO `name` field. Products store
+          `category` as the category KEY (e.g. "Tiller"). Lines 81, 86, and 94
+          in admin.py reference `c["name"]` / `c.get("name")` which evaluates to
+          None or KeyError.
+          Auth (admin OTP) and 403-for-non-admin both work; only the body assembly
+          crashes.
+          FIX: replace `c["name"]` / `c.get("name")` with `c.get("key")` (or
+          `c.get("label")` for the response display name) inside the
+          inventory_summary route. After fix:
+            cat_names = {c.get("key") for c in cats}
+            await db.products.find({"category": c["key"]}, ...)
+            "name": c.get("label", c.get("key")),
+          Also update by_category row 'name' field accordingly so the response
+          shape `{id, name, icon, ...}` actually populates name from the category
+          label.
+
+  - task: "Admin Product reorder endpoint"
+    implemented: true
+    working: true
+    file: "backend/routes/admin.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          PASS via /app/backend_test_inventory.py (8/8 reorder assertions).
+          GET /products baseline returned 19 products; POST /admin/products/reorder
+          {ordered_ids:<reversed>} -> 200 with list response. Subsequent GET /products
+          order matched the reversed input exactly. Every product doc has a
+          `sort_order` field after reorder. Idempotent re-POST same payload -> 200.
+          Customer token -> 403. Admin restored to original order at end. Sort
+          regression: POSTed a brand-new product with no sort_order; two consecutive
+          GET /products calls returned identical ordering (deterministic) and the
+          new product appears at index 0/20 (since missing sort_order < positive
+          values when ascending).
+
   - task: "Lead referral & loyalty points system"
     implemented: true
     working: true
@@ -658,6 +714,52 @@ frontend:
       Backend logs clean throughout (no 5xx). All assertions in the review
       request verified end-to-end. No further backend retest required for
       this batch.
+
+  - agent: "testing"
+    message: |
+      Inventory + Product Reorder regression via /app/backend_test_inventory.py
+      against the public preview URL. RESULT: **22 PASS / 1 FAIL**.
+
+      A) Inventory summary — **FAIL (CRITICAL)**: GET /api/admin/inventory/summary
+         returns **500 Internal Server Error**. Backend traceback:
+           File "/app/backend/routes/admin.py", line 86, in inventory_summary
+               {"category": c["name"]}, ...
+           KeyError: 'name'
+         Root cause: the categories collection has fields {id, key, label, icon,
+         sort_order, active} — there is NO `name` field. Products store `category`
+         as the category KEY (e.g. "Tiller"). Lines 81, 86 and 94 of admin.py
+         reference c["name"]/c.get("name") which raises KeyError. Fix: replace
+         c["name"] / c.get("name") with c.get("key") for matching products and
+         use c.get("label", c.get("key")) for the response display name.
+         Auth gating works correctly: admin OTP login is fine, customer token
+         correctly receives 403 on this endpoint — only the body assembly crashes.
+
+      B) Product reorder — **PASS** (8/8 assertions):
+         - GET /products baseline returned 19 products.
+         - POST /admin/products/reorder {ordered_ids:<reversed>} -> 200 with list response.
+         - Subsequent GET /products order matched the reversed input EXACTLY.
+         - Every product doc now has a `sort_order` field after reorder.
+         - Idempotent re-POST same payload -> 200.
+         - POST as customer token -> 403 (gating correct).
+         - Restored original order at end.
+
+      C) Sort regression — **PASS**:
+         - POSTed a brand-new admin product with no sort_order. Two consecutive
+           GET /products calls returned identical ordering (deterministic). New
+           product appears at index 0/20 (Mongo treats missing sort_order as
+           lowest in ascending sort). Cleaned up after.
+
+      D) Smoke regression — **PASS**:
+         - GET /manager/me as admin -> 200, manager_perms includes
+           {leads:true, service:true, warranty:true, points:true}.
+         - POST /manager/assign-warranty (1 product, dummy phone +919998880077)
+           as admin -> 200 with order created.
+         - POST /manager/points/adjust {user_id:ramesh, delta:5, reason:"smoke"}
+           as admin -> 200 with new_balance=1030.
+
+      ACTION FOR MAIN AGENT: Fix the c["name"] -> c.get("key") in
+      /app/backend/routes/admin.py:81,86,94 (inventory_summary). Until that is
+      fixed, the new admin Inventory dashboard cannot load any data.
 
   - agent: "testing"
     message: |

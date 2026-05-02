@@ -7,7 +7,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Alert, Modal, KeyboardAvoidingView, Platform, TextInput, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Video, ResizeMode } from 'expo-av';
+import VideoPlayer from '../src/components/VideoPlayer';
 import { api, formatApiError, absoluteUrl } from '../src/api';
 import { theme } from '../src/theme';
 import { safeBack } from '../src/nav';
@@ -218,7 +218,7 @@ function ServiceList() {
               <Text style={styles.modalSub}>{target?.customer_name} · {target?.customer_phone}</Text>
               <Text style={styles.desc}>{target?.description}</Text>
               {!!target?.photo && <Image source={{ uri: absoluteUrl(target.photo.url) }} style={styles.fullImg} />}
-              {!!target?.video && <Video source={{ uri: absoluteUrl(target.video.url)! }} style={styles.fullVideo} useNativeControls resizeMode={ResizeMode.CONTAIN} />}
+              {!!target?.video && <VideoPlayer uri={absoluteUrl(target.video.url)!} style={styles.fullVideo} />}
               {target?.timeline?.length ? (
                 <View style={{ marginTop: 12 }}>
                   <Text style={styles.field}>Activity</Text>
