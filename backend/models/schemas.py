@@ -96,6 +96,10 @@ class AdminProductIn(BaseModel):
     specifications: dict = {}
     recommended_hp: str = ""
     featured: bool = False
+    # GST / billing fields (default values match HANSA's most-used HSN)
+    hsn_code: str = "843290"
+    gst_rate: float = 5.0
+    unit: str = "NOS"
 
 
 class AdminNewsIn(BaseModel):

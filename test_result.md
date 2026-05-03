@@ -526,6 +526,34 @@ backend:
           4) GET /api/admin/leads confirms retest lead has status='purchased'.
           No 5xx. Fix verified.
 
+  - task: "Billing Phase 1+2 (Company/Customers/Quotations/Invoices)"
+    implemented: true
+    working: false
+    file: "backend/routes/billing.py + backend/services/gst.py + backend/services/pdfgen.py"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: false
+        agent: "testing"
+        comment: |
+          53/55 PASS via /app/backend_test_billing.py. All CRUD, GST math
+          (intra-state CGST+SGST, inter-state IGST), numbering integrity
+          (HANSA/FY/QUO|INV/NNNN increments cleanly), quotation->invoice
+          conversion, amount_in_words, and auth gating (401/403) verified.
+          CRITICAL: both PDF endpoints
+          (GET /admin/billing/quotations/{id}/pdf and
+          GET /admin/billing/invoices/{id}/pdf) return **500** due to a
+          reportlab layout bug in services/pdfgen.py:229. The outer wrapper
+          `Table([[party_table, meta_table]], colWidths=[180*mm, 0])` has a
+          zero-width second column, and the inner party_table (3x60mm=180mm)
+          fully fills the first 180mm column — after outer Table's
+          LEFTPADDING+RIGHTPADDING=12pt the child flowable is given
+          availWidth=-12 and reportlab raises ValueError. Fix: set the
+          outer colWidths to e.g. [105*mm, 77*mm] AND shrink inner
+          party_table colWidths to fit (e.g. [33,34,34]*mm). All other
+          billing functionality is correct.
+
 frontend:
   - task: "Login screen - mobile OTP only (remove email/admin login UI)"
     implemented: true
@@ -806,6 +834,80 @@ frontend:
          service:true, warranty:true, points:true} (super-manager default).
       No 5xx in backend logs during the run. N+1 -> batched optimization did not
       alter behavior or response shape. No further retest required.
+
+  - agent: "testing"
+    message: |
+      HANSA Billing Phase 1+2 regression via /app/backend_test_billing.py —
+      **53 PASS / 2 FAIL**. Admin OTP login with +919045666666 works.
+
+      A) Company settings (PASS 8/8):
+         - GET /api/admin/billing/company → 200, auto-seeded with RAMKISHAN
+           AGRI INNOVATE PRIVATE LIMITED, gstin=09AAOCR7303L1ZU, state_code=09,
+           city=Meerut. PUT with edited trade_name/default_terms persisted.
+           PUT with gstin="INVALID" → 400.
+      B) Customer master (PASS 12/12): UP customer → billing_state_code=09,
+         pan=ABCDE1234F derived from GSTIN; MH customer (27ABCDE1234F1Z5) →
+         billing_state_code=27; invalid GSTIN → 400; list contains both;
+         PATCH + DELETE 200.
+      C) Catalog helper (PASS 3/3): 19 items, each has
+         {hsn_code, gst_rate, unit, rate}.
+      D) Quotation (PASS 10/11):
+         - POST quotation UP→UP → 200 number "HANSA/2026-27/QUO/0001",
+           totals.intra_state=true, cgst=2375 sgst=2375 igst=0,
+           amount_in_words="Rupees Ninety-Nine Thousand Seven Hundred And
+           Fifty Only".
+         - GET /quotations contains it.
+         - **FAIL D8**: GET /quotations/{id}/pdf → **500 Internal Server Error**
+           (reportlab ValueError: nested Table has colWidths=[180mm, 0]; the
+           party_table+meta_table outer wrapper gives the meta column 0 width,
+           then inner party_table at 60mm×3 = 180mm exceeds outer cell width
+           after leftPadding/rightPadding=6, producing "negative
+           availWidth=-12").
+         - POST /quotations/{id}/convert → 200, invoice number
+           "HANSA/2026-27/INV/0001", quotation.status="converted".
+      E) Tax Invoice inter-state (PASS 7/8):
+         - POST /invoices (MH customer, gst 18%) → 200, totals.intra_state=false,
+           igst=5400, cgst=0, sgst=0, number="HANSA/2026-27/INV/0002"
+           (incremented by +1 from converted INV/0001).
+         - **FAIL E7**: GET /invoices/{id}/pdf → **500** (same reportlab
+           layout bug as D8).
+         - GET /invoices list contains both.
+      F) Numbering integrity (PASS): 3 quick QUOs returned sequences [2,3,4]
+         cleanly — no gaps.
+      G) Negative auth (PASS 11/11): no-auth → 401, customer token → 403 on
+         all /admin/billing/* endpoints (GET + POST).
+
+      ## CRITICAL FAIL — PDF endpoints
+      Backend log traceback:
+        File "/app/backend/services/pdfgen.py", line 237, in render_billing_doc
+          pdf.build(story)
+        ...
+        ValueError: <Table ... 1 rows x 2 cols ...> with cell(0,0) containing
+          "<Table ... 2 rows x 3 cols ...>": flowable given negative
+          availWidth=-12 == width=0 - leftPadding=6 - rightPadding=6
+      Root cause: pdfgen.py:229 calls
+        `Table([[party_table, meta_table]], colWidths=[180 * mm, 0])`
+      The second column has **width 0** but contains `meta_table`; and the
+      first column (180mm) nests `party_table` built with `colWidths=[60mm,
+      60mm, 60mm]` = exactly 180mm, so after the outer Table's
+      LEFTPADDING/RIGHTPADDING=6pt is applied the available width for the
+      child flowable becomes -12pt → reportlab raises and the route returns
+      500. BOTH quotation and invoice PDF endpoints are affected.
+
+      SUGGESTED FIX (main agent):
+      - Change line 229 wrapper to use explicit widths that sum to
+        (width - 2*margin) = ~182mm, e.g.
+          Table([[party_table, meta_table]], colWidths=[105*mm, 77*mm])
+        AND reduce party_table column widths to fit that 105mm cell
+        (e.g. colWidths=[33*mm, 34*mm, 34*mm]).
+      - Or remove the outer wrapper and place party_table and meta_table as
+        sibling flowables / use two separate rows.
+      Also the footer Table at line 218 has colWidths=[110mm, 60mm]=170mm
+      (within 182mm frame) which is fine, but the totals row at line 233
+      uses [100mm, 75mm]=175mm which is fine.
+
+      Everything except PDF rendering works. Data persistence, GST math,
+      numbering, conversion, auth gating are all correct.
 
   - agent: "testing"
     message: |
