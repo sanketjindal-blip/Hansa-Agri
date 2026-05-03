@@ -177,6 +177,8 @@ function DocsTab({ kind }: { kind: 'quotation' | 'invoice' }) {
     { text: 'Delete', style: 'destructive', onPress: async () => { await api.delete(`${path}/${doc.id}`); load(); } },
   ]);
 
+  const [ewayInv, setEwayInv] = useState<Doc | null>(null);
+
   if (loading) return <ActivityIndicator color={theme.colors.primary} style={{ marginTop: 30 }} />;
 
   return (
@@ -195,9 +197,17 @@ function DocsTab({ kind }: { kind: 'quotation' | 'invoice' }) {
               </View>
               <Text style={s.metaTxt} numberOfLines={1}>{d.buyer?.name}</Text>
               <Text style={s.metaTxt}>{new Date(d.date).toLocaleDateString('en-IN')}  ·  {formatINR(d.totals?.grand_total || 0)}  ·  {d.totals?.intra_state ? 'CGST+SGST' : 'IGST'}</Text>
+              {kind === 'invoice' && d.eway_bill_no ? (
+                <Text style={[s.metaTxt, { color: '#0A84FF', fontWeight: '700' }]} numberOfLines={1}>e-Way: {d.eway_bill_no}</Text>
+              ) : null}
             </View>
             <View style={{ gap: 6 }}>
               <TouchableOpacity onPress={() => openPdf(d.id)} style={[s.iconBtn, { backgroundColor: '#FFF8E6' }]}><Ionicons name="document-text" size={18} color={theme.colors.primary} /></TouchableOpacity>
+              {kind === 'invoice' && (
+                <TouchableOpacity onPress={() => setEwayInv(d)} style={[s.iconBtn, { backgroundColor: '#E0F0FF' }]}>
+                  <Ionicons name={d.eway_bill_no ? 'checkmark-circle' : 'car-outline'} size={18} color="#0A84FF" />
+                </TouchableOpacity>
+              )}
               {kind === 'quotation' && d.status !== 'converted' && (
                 <TouchableOpacity onPress={() => convert(d)} style={[s.iconBtn, { backgroundColor: '#E6F7E9' }]}><Ionicons name="arrow-forward-circle" size={18} color="#34C759" /></TouchableOpacity>
               )}
@@ -207,7 +217,83 @@ function DocsTab({ kind }: { kind: 'quotation' | 'invoice' }) {
         ))}
       </ScrollView>
       {showCreate && <DocEditor kind={kind} onClose={() => { setShowCreate(false); load(); }} />}
+      {ewayInv && <EwayBillModal invoice={ewayInv} onClose={() => { setEwayInv(null); load(); }} />}
     </View>
+  );
+}
+
+function EwayBillModal({ invoice, onClose }: { invoice: any; onClose: () => void }) {
+  const [eb, setEb] = useState(invoice.eway_bill_no || '');
+  const [ebDate, setEbDate] = useState(invoice.eway_bill_date || '');
+  const [veh, setVeh] = useState(invoice.vehicle_no || '');
+  const [tmode, setTmode] = useState(invoice.transport_mode || 'Road');
+  const [tname, setTname] = useState(invoice.transporter_name || '');
+  const [tid, setTid] = useState(invoice.transporter_id || '');
+  const [busy, setBusy] = useState(false);
+  const [genBusy, setGenBusy] = useState(false);
+
+  const save = async () => {
+    if (!eb.trim()) { Alert.alert('Missing', 'Enter the e-Way Bill number'); return; }
+    setBusy(true);
+    try {
+      await api.post(`/admin/billing/invoices/${invoice.id}/eway-bill`, {
+        eway_bill_no: eb, eway_bill_date: ebDate, vehicle_no: veh, transport_mode: tmode,
+        transporter_name: tname, transporter_id: tid,
+      });
+      Alert.alert('Saved', 'e-Way Bill attached to invoice');
+      onClose();
+    } catch (e: any) { Alert.alert('Error', formatApiError(e)); } finally { setBusy(false); }
+  };
+
+  const generate = async () => {
+    setGenBusy(true);
+    try {
+      const r = await api.post(`/admin/billing/invoices/${invoice.id}/generate-eway`);
+      Alert.alert('Generated', JSON.stringify(r.data));
+      onClose();
+    } catch (e: any) {
+      Alert.alert('e-Way Bill GSP', formatApiError(e) + '\n\nFor now use Manual Entry below.');
+    } finally { setGenBusy(false); }
+  };
+
+  return (
+    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalWrap}>
+        <View style={s.modal}>
+          <ScrollView keyboardShouldPersistTaps="handled">
+            <Text style={s.modalTitle}>e-Way Bill — {invoice.number}</Text>
+            <Text style={[s.metaTxt, { padding: 10, backgroundColor: '#FFFBEA', borderRadius: 8, marginVertical: 8 }]}>
+              GSP integration (Cygnet/NIC/etc.) is pending credentials. Until then, generate the e-Way Bill on the GST portal manually and paste the 12-digit number below to attach it to the invoice & PDF.
+            </Text>
+            <TouchableOpacity onPress={generate} disabled={genBusy} style={[s.btn, { backgroundColor: '#0A84FF', marginBottom: 12 }]}>
+              {genBusy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnTxt}>Auto-Generate via GSP (pending creds)</Text>}
+            </TouchableOpacity>
+
+            <Text style={s.field}>e-Way Bill No. *</Text>
+            <TextInput placeholder="12-digit number" placeholderTextColor={theme.colors.textMuted} value={eb} onChangeText={setEb} keyboardType="numeric" maxLength={12} style={s.input} />
+            <Text style={s.field}>Date</Text>
+            <TextInput placeholder="YYYY-MM-DD" placeholderTextColor={theme.colors.textMuted} value={ebDate} onChangeText={setEbDate} style={s.input} />
+            <Text style={s.field}>Vehicle No.</Text>
+            <TextInput placeholder="e.g. UP14AB1234" placeholderTextColor={theme.colors.textMuted} value={veh} onChangeText={setVeh} style={s.input} />
+            <Text style={s.field}>Transport Mode</Text>
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              {['Road', 'Rail', 'Air', 'Ship'].map(m => (
+                <TouchableOpacity key={m} onPress={() => setTmode(m)} style={[s.chip, tmode === m && s.chipOn]}><Text style={[s.chipTxt, tmode === m && s.chipTxtOn]}>{m.toUpperCase()}</Text></TouchableOpacity>
+              ))}
+            </View>
+            <Text style={s.field}>Transporter Name</Text>
+            <TextInput placeholder="Optional" placeholderTextColor={theme.colors.textMuted} value={tname} onChangeText={setTname} style={s.input} />
+            <Text style={s.field}>Transporter ID</Text>
+            <TextInput placeholder="Optional 15-char GST or transporter ID" placeholderTextColor={theme.colors.textMuted} value={tid} onChangeText={setTid} style={s.input} />
+
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+              <TouchableOpacity onPress={onClose} style={[s.btn, { backgroundColor: '#eee', flex: 1 }]}><Text style={[s.btnTxt, { color: theme.colors.textPrimary }]}>Cancel</Text></TouchableOpacity>
+              <TouchableOpacity onPress={save} disabled={busy} style={[s.btn, { backgroundColor: theme.colors.primary, flex: 1 }]}>{busy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnTxt}>Save Manual Entry</Text>}</TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 

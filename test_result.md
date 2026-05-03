@@ -623,7 +623,53 @@ backend:
           billing functionality is correct.
 
 frontend:
-  - task: "Admin Billing UI (Phase 1+2 — Customers / Quotations / Tax Invoices) + Company Settings"
+  - task: "Admin Billing UI Phase 3+4+5(stub)+7 — Delivery, Purchase, Reports + e-Way Bill"
+    implemented: true
+    working: true
+    file: "frontend/app/admin-delivery.tsx + admin-purchase.tsx + admin-reports.tsx + admin-billing.tsx + (tabs)/profile.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: |
+          Built 3 new admin screens + extended existing billing screen:
+          • /admin-delivery  — 2 tabs: DELIVERY CHALLAN + GATE PASS.
+              DC editor: customer chips, apply_gst toggle (Sale tax-bearing |
+              Job-work no-GST), purpose chips (sale/job-work/sample/approval/return),
+              line items with catalog auto-fill, vehicle/driver/transporter fields,
+              PDF preview/download.
+              GP editor: direction (outward/inward), generate-from picker
+              (DC | Invoice | Manual), one-click reference doc list, party/items/
+              vehicle override fields, PDF preview.
+          • /admin-purchase  — 2 tabs: PURCHASE ORDERS + VENDORS.
+              Vendor editor: same GSTIN-aware UX as Customer editor (~14 fields incl.
+              bank). PO editor: vendor chips, line items (default GST 18% for raw
+              materials), expected delivery, GST math auto (vendor-state vs our-state
+              → IGST or CGST+SGST), PDF preview.
+          • /admin-reports  — horizontal tab strip: GSTR-1 / SALES REGISTER /
+              CUSTOMER LEDGER / AGING. GSTR-1 picks period MMYYYY, shows summary
+              (B2B/B2CL/B2CS/HSN counts + totals), "Download GSTR-1 JSON" button
+              creates a Blob on web (gov-spec offline tool ready). Sales Register
+              with date-range filter + per-row card. Customer Ledger picks customer
+              via chips, lists chronological QUO/INV/DC entries. Aging with bucket
+              summary card (0-30/31-60/61-90/90+) + per-invoice rows.
+          • /admin-billing (Invoices tab): added blue "car" icon on every invoice
+              row that opens an EwayBillModal. Modal has:
+                - "Auto-Generate via GSP" button → 503 with friendly message until
+                  creds added in backend/.env.
+                - Manual entry fields: e-Way Bill No., Date, Vehicle, Transport
+                  Mode (Road/Rail/Air/Ship chips), Transporter Name, Transporter ID.
+                - Saves via POST /admin/billing/invoices/{id}/eway-bill.
+                - When saved, invoice card shows "e-Way: <number>" line + checkmark
+                  icon turns green.
+          • Profile menu (admin only): added 3 new entries linking to the new
+              screens — Delivery Challan & Gate Pass, Vendors & Purchase Orders,
+              Reports.
+          Verified via screenshot at 390×844 mobile viewport: all 3 screens load
+          cleanly with the right tabs, headers, and empty states. Backend already
+          68/68 PASS in this batch.
     implemented: true
     working: true
     file: "frontend/app/admin-billing.tsx + frontend/app/admin-company-settings.tsx + frontend/src/api.ts"
