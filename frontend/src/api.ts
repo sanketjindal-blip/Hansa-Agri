@@ -31,3 +31,14 @@ export function absoluteUrl(rel?: string | null): string | undefined {
   if (rel.startsWith('http')) return rel;
   return `${BASE}${rel}`;
 }
+
+/** Format a number in INR with grouping and ₹ prefix, e.g. 99750 -> "₹ 99,750.00". */
+export function formatINR(value?: number | string | null): string {
+  const n = Number(value || 0);
+  if (!isFinite(n)) return '₹ 0.00';
+  try {
+    return '₹ ' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  } catch {
+    return '₹ ' + n.toFixed(2);
+  }
+}

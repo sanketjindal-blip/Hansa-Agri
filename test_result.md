@@ -564,6 +564,30 @@ backend:
           billing functionality is correct.
 
 frontend:
+  - task: "Admin Billing UI (Phase 1+2 — Customers / Quotations / Tax Invoices) + Company Settings"
+    implemented: true
+    working: true
+    file: "frontend/app/admin-billing.tsx + frontend/app/admin-company-settings.tsx + frontend/src/api.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: |
+          Fixed missing `formatINR` export in src/api.ts (admin-billing.tsx
+          imported it but it didn't exist — would have crashed on import).
+          Verified both /admin-billing and /admin-company-settings render
+          cleanly via screenshot tool at 390×844 viewport. Billing screen
+          shows 3-tab pill row (INVOICES/QUOTATIONS/CUSTOMERS), header back
+          + Company Settings business icon, "New Tax Invoice" CTA, and
+          empty state. Company Settings shows all 20 fields (Legal Name,
+          GSTIN, PAN, CIN, Address, City, State, State Code, Pincode,
+          Phone, Email, Website, Bank Name, A/c, IFSC, Branch, Invoice
+          Prefix, Default T&C) + Save button. Wired into Admin profile
+          menu via /(tabs)/profile.tsx. Backend already verified at 55/55
+          PASS incl. PDF retest 4/4 PASS in earlier session.
+
   - task: "Login screen - mobile OTP only (remove email/admin login UI)"
     implemented: true
     working: "NA"
