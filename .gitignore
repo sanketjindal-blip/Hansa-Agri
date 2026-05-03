@@ -88,3 +88,6 @@ credentials.json
 *.pem
 *.key
 .credentials
+
+# Old Expo backup (migrated to React Web)
+frontend-expo-backup/
