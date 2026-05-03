@@ -5,7 +5,7 @@ import requests
 from motor.motor_asyncio import AsyncIOMotorClient
 import asyncio
 
-BACKEND_URL = "https://farm-gear-hub-4.preview.emergentagent.com"
+BACKEND_URL = "https://fullstack-migration-1.preview.emergentagent.com"
 API = f"{BACKEND_URL}/api"
 ADMIN_PHONE = "+919045666666"
 

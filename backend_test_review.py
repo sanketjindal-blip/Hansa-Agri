@@ -8,7 +8,7 @@ import sys
 import json
 import requests
 
-BASE = "https://farm-gear-hub-4.preview.emergentagent.com/api"
+BASE = "https://fullstack-migration-1.preview.emergentagent.com/api"
 
 ADMIN_EMAIL = "admin@rkai.com"
 ADMIN_PASSWORD = "admin123"

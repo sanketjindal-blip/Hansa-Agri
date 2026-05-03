@@ -8,7 +8,7 @@ from pymongo import MongoClient
 
 BASE = os.environ.get(
     "BACKEND_URL",
-    "https://farm-gear-hub-4.preview.emergentagent.com",
+    "https://fullstack-migration-1.preview.emergentagent.com",
 ).rstrip("/") + "/api"
 MONGO_URL = "mongodb://localhost:27017"
 DB_NAME = "rkai_app"

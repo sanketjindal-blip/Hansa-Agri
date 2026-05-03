@@ -4,7 +4,7 @@ import sys
 import uuid
 import requests
 
-BASE = os.environ.get("BASE_URL", "https://farm-gear-hub-4.preview.emergentagent.com").rstrip("/")
+BASE = os.environ.get("BASE_URL", "https://fullstack-migration-1.preview.emergentagent.com").rstrip("/")
 API = f"{BASE}/api"
 
 results = []

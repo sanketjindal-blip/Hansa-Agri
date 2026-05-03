@@ -13,7 +13,7 @@ import os, sys, io, json, time, requests
 from PIL import Image
 from pymongo import MongoClient
 
-BASE = "https://farm-gear-hub-4.preview.emergentagent.com/api"
+BASE = "https://fullstack-migration-1.preview.emergentagent.com/api"
 MONGO_URL = "mongodb://localhost:27017"
 DB_NAME = "rkai_app"
 mdb = MongoClient(MONGO_URL)[DB_NAME]

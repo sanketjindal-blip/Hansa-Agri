@@ -33,6 +33,6 @@
   "seed_data_creation": "Used seeded customer ramesh@farm.com (3 warranty records confirmed via API). Tests create TEST_ prefixed users/tickets/orders; not cleaned up but isolated by prefix.",
   "retest_needed": true,
   "should_main_agent_self_test": true,
-  "context_for_next_testing_agent": "Backend API at https://farm-gear-hub-4.preview.emergentagent.com/api works fully. To drive UI checkout flow, main agent should add testIDs (cart-icon, add-to-cart-btn, place-order-btn, login-* etc) and persist cart in AsyncStorage. After that, run /app/backend/tests/test_rkai_api.py and a Playwright script that taps via [data-testid].",
+  "context_for_next_testing_agent": "Backend API at https://fullstack-migration-1.preview.emergentagent.com/api works fully. To drive UI checkout flow, main agent should add testIDs (cart-icon, add-to-cart-btn, place-order-btn, login-* etc) and persist cart in AsyncStorage. After that, run /app/backend/tests/test_rkai_api.py and a Playwright script that taps via [data-testid].",
   "rca_of_issue": "Cart appears empty on /cart deep-link because CartContext stores items in useState only (no AsyncStorage). Repro: login -> tap product -> Add to Cart (badge becomes 1) -> hit browser refresh or open /cart in new tab -> Cart (0). Mitigation: wrap setItems with AsyncStorage.setItem('rkai_cart', JSON.stringify(items)) on change and hydrate on mount."
 }

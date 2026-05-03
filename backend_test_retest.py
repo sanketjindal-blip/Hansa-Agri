@@ -3,7 +3,7 @@ import os
 import sys
 import requests
 
-BASE = "https://farm-gear-hub-4.preview.emergentagent.com/api"
+BASE = "https://fullstack-migration-1.preview.emergentagent.com/api"
 
 results = []
 def rec(name, ok, detail=""):

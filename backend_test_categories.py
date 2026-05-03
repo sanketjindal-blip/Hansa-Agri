@@ -7,7 +7,7 @@ import sys
 import requests
 
 BASE = os.environ.get(
-    "BACKEND_URL", "https://farm-gear-hub-4.preview.emergentagent.com"
+    "BACKEND_URL", "https://fullstack-migration-1.preview.emergentagent.com"
 ).rstrip("/") + "/api"
 
 ADMIN_EMAIL = "admin@rkai.com"

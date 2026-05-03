@@ -4,7 +4,7 @@ import sys
 import requests
 from pymongo import MongoClient
 
-BASE = "https://farm-gear-hub-4.preview.emergentagent.com/api"
+BASE = "https://fullstack-migration-1.preview.emergentagent.com/api"
 MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
 MONGO = MongoClient(MONGO_URL)
 # Look up DB name from backend env
