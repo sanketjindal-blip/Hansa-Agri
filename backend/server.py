@@ -60,6 +60,12 @@ async def root():
     return {"status": "ok", "app": "RKAI Customer App"}
 
 
+@app.get("/health")
+async def health():
+    """Health check endpoint for deployment system"""
+    return {"status": "healthy", "app": "HANSA Agriculture"}
+
+
 app.include_router(api)
 
 app.add_middleware(

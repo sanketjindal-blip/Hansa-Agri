@@ -9,4 +9,10 @@ export default defineConfig({
     port: 3000,
     strictPort: true,
   },
+  build: {
+    outDir: 'dist',
+    sourcemap: false,
+    minify: 'esbuild',
+    chunkSizeWarningLimit: 1000,
+  },
 })
