@@ -192,6 +192,16 @@ def render_billing_doc(doc_kind: str, doc: dict, company: dict) -> bytes:
         ("TOPPADDING", (0, 0), (-1, -1), 4),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
     ]))
+    party_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), LIGHT),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("BOX", (0, 0), (-1, -1), 0.4, colors.HexColor("#D1D5DB")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#D1D5DB")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
 
     items = doc.get("items") or []
     totals = doc.get("totals") or {}
@@ -222,15 +232,31 @@ def render_billing_doc(doc_kind: str, doc: dict, company: dict) -> bytes:
         ("TOPPADDING", (0, 0), (-1, -1), 8),
     ]))
 
+    # Header row: title on left, doc-meta block on right.
+    title_para = Paragraph(head_title, s["title"])
+    sub_para = Paragraph(f"<font color='#6B7280'>{company.get('legal_name','')}</font>", s["small"])
+    title_cell = Table([[title_para], [sub_para]], colWidths=[110 * mm])
+    title_cell.setStyle(TableStyle([
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    header_row = Table([[title_cell, meta_table]], colWidths=[110 * mm, 72 * mm])
+    header_row.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+    ]))
+
     story = [
-        Paragraph(head_title, s["title"]),
-        Paragraph(f"<font color='#6B7280'>{company.get('legal_name','')}</font>", s["small"]),
-        Spacer(1, 6),
-        Table([[party_table, meta_table]], colWidths=[180 * mm, 0]),
+        header_row,
+        Spacer(1, 8),
+        party_table,
         Spacer(1, 6),
         items_tbl,
         Spacer(1, 4),
-        Table([["", _totals_block(totals, s)]], colWidths=[100 * mm, 75 * mm]),
+        Table([["", _totals_block(totals, s)]], colWidths=[105 * mm, 75 * mm]),
         Spacer(1, 4),
         foot_table,
     ]

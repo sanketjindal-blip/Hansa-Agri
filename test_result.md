@@ -528,12 +528,21 @@ backend:
 
   - task: "Billing Phase 1+2 (Company/Customers/Quotations/Invoices)"
     implemented: true
-    working: false
+    working: true
     file: "backend/routes/billing.py + backend/services/gst.py + backend/services/pdfgen.py"
-    stuck_count: 1
+    stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          PDF retest after pdfgen.py layout fix — both endpoints now return 200 with valid multi-KB PDFs.
+          Verified via /app/billing_pdf_retest.py:
+          • GET /api/admin/billing/quotations/{id}/pdf → 200, Content-Type=application/pdf, 3427 bytes, body starts with %PDF-1.4.
+          • GET /api/admin/billing/invoices/{id}/pdf → 200, Content-Type=application/pdf, 3423 bytes, body starts with %PDF-1.4.
+          • Sanity: GET /api/admin/billing/quotations → 200 (4 quotations); GET /api/admin/billing/invoices → 200 (2 invoices). List endpoints unaffected.
+          The previous reportlab `negative availWidth=-12` ValueError is resolved (header_row now uses colWidths=[110mm,72mm] with title_cell wrapper). Both PDFs render header + party-block + items-table + totals + signature successfully.
       - working: false
         agent: "testing"
         comment: |
@@ -944,3 +953,14 @@ frontend:
 
       No 5xx observed. No further backend retest required for these
       assertions.
+
+
+  - agent: "testing"
+    message: |
+      Billing PDF retest after layout fix — **ALL 4 CHECKS PASS**, zero 5xx.
+      Ran /app/billing_pdf_retest.py against the public preview URL with admin OTP login (+919045666666).
+      1) GET /api/admin/billing/quotations/{id}/pdf → 200, Content-Type=application/pdf, 3427 bytes (>1000), body starts with %PDF-1.4. ✅
+      2) GET /api/admin/billing/invoices/{id}/pdf → 200, Content-Type=application/pdf, 3423 bytes (>1000), body starts with %PDF-1.4. ✅
+      3) GET /api/admin/billing/quotations → 200 (4 quotations listed). ✅
+      4) GET /api/admin/billing/invoices → 200 (2 invoices listed). ✅
+      The previous reportlab `negative availWidth=-12` ValueError is fully resolved (header_row uses colWidths=[110mm,72mm] with title_cell wrapper instead of the broken [180mm,0]). Both PDFs render header + meta + party-block + items-table + totals + signature. Billing feature cleared; no further retest required.
