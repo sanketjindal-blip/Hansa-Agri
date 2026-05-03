@@ -787,6 +787,28 @@ frontend:
 
   - agent: "testing"
     message: |
+      N+1 optimization smoke test — /app/backend_test_n1_smoke.py — **10/10 PASS, zero 5xx**.
+      Behavior is identical to pre-optimization:
+      1) GET /api/admin/inventory/summary (admin +919045666666) -> 200. Response keys
+         exactly {totals, by_category, recent_products, top_priced, out_of_stock}.
+         totals has {products, categories, featured, in_stock, out_of_stock, total_value_inr}.
+         by_category length = 10 (one per registered category); every row has
+         products_count/avg_price/total_value (plus id/name/key/icon/active/in_stock_count/out_of_stock_count).
+         Note: code now uses single `db.products.find({}).to_list(5000)` + in-memory
+         bucketing (was one `.find({"category": key})` per category) — results match.
+      2) GET /api/admin/dealer-users -> 200 with 2 dealer users. Both have `dealer_id`;
+         both dealer_ids resolve to existing dealer docs; both users have populated
+         `dealer_profile` with `name` and `city`. Batched `$in` query works.
+      3) POST /api/admin/leads {name, phone:+919555000111, manager_ids:[mgr],
+         all_managers:false, source:"call"} -> 200. admin_created=True, source="call",
+         assigned_manager_ids matches request. Unchanged flow.
+      4) GET /api/manager/me (admin) -> 200. role="admin", perms={leads:true,
+         service:true, warranty:true, points:true} (super-manager default).
+      No 5xx in backend logs during the run. N+1 -> batched optimization did not
+      alter behavior or response shape. No further retest required.
+
+  - agent: "testing"
+    message: |
       Quick regression after frontend-integration session — /app/backend_test.py
       ALL 16 assertions PASS, zero 5xx.
 

@@ -77,18 +77,23 @@ async def inventory_summary(user=Depends(require_admin)):
     in_stock_count = await db.products.count_documents({"in_stock": True})
     out_stock_count = await db.products.count_documents({"in_stock": False})
 
+    # Fetch ALL products in one query + bucket by category in-memory (was N+1).
+    all_prods = await db.products.find(
+        {}, {"_id": 0, "category": 1, "price": 1, "in_stock": 1},
+    ).to_list(5000)
+    from collections import defaultdict
+    buckets: dict[str, list] = defaultdict(list)
+    for p in all_prods:
+        buckets[p.get("category") or ""].append(p)
+
     cats = await db.categories.find({}, {"_id": 0}).sort("sort_order", 1).to_list(200)
-    # Categories have shape `{key, label, icon, ...}`. Products store the
-    # category KEY (e.g. "Tiller") in their `category` field.
     cat_keys = {c.get("key") for c in cats if c.get("key")}
     by_category: list[dict] = []
     total_value = 0.0
     for c in cats:
         key = c.get("key", "")
         label = c.get("label") or key
-        prods = await db.products.find(
-            {"category": key}, {"_id": 0, "price": 1, "in_stock": 1, "id": 1},
-        ).to_list(500)
+        prods = buckets.get(key, [])
         cnt = len(prods)
         sum_price = float(sum(p.get("price", 0) for p in prods))
         avg_price = sum_price / cnt if cnt else 0.0
@@ -108,10 +113,10 @@ async def inventory_summary(user=Depends(require_admin)):
         total_value += sum_price
 
     # Uncategorised bucket (products whose category isn't in cat_keys)
-    other_prods = await db.products.find(
-        {}, {"_id": 0, "category": 1, "price": 1, "in_stock": 1},
-    ).to_list(500)
-    uncategorised = [p for p in other_prods if p.get("category") not in cat_keys]
+    uncategorised: list = []
+    for cat_key, prods in buckets.items():
+        if cat_key not in cat_keys:
+            uncategorised.extend(prods)
     if uncategorised:
         u_sum = float(sum(p.get("price", 0) for p in uncategorised))
         u_in = sum(1 for p in uncategorised if p.get("in_stock", True))
@@ -448,12 +453,17 @@ async def list_dealer_users(user=Depends(require_admin)):
     items = await db.users.find(
         {"role": "dealer"}, {"_id": 0, "password_hash": 0}
     ).to_list(500)
-    # Hydrate dealer profile for friendly display
+    # Hydrate dealer profiles in one query (was N+1)
+    dealer_ids = [u["dealer_id"] for u in items if u.get("dealer_id")]
+    dealer_map: dict = {}
+    if dealer_ids:
+        dealers = await db.dealers.find({"id": {"$in": dealer_ids}}, {"_id": 0}).to_list(500)
+        dealer_map = {d["id"]: d for d in dealers}
     for u in items:
-        if u.get("dealer_id"):
-            d = await db.dealers.find_one({"id": u["dealer_id"]}, {"_id": 0})
-            if d:
-                u["dealer_profile"] = {"name": d.get("name"), "city": d.get("city")}
+        did = u.get("dealer_id")
+        if did and did in dealer_map:
+            d = dealer_map[did]
+            u["dealer_profile"] = {"name": d.get("name"), "city": d.get("city")}
     return items
 
 
