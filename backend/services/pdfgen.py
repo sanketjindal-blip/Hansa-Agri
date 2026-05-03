@@ -128,8 +128,16 @@ def _totals_block(totals: dict, styles):
     return t
 
 
+DOC_TITLES = {
+    "quotation": "QUOTATION",
+    "invoice": "TAX INVOICE",
+    "delivery_challan": "DELIVERY CHALLAN",
+    "purchase_order": "PURCHASE ORDER",
+}
+
+
 def render_billing_doc(doc_kind: str, doc: dict, company: dict) -> bytes:
-    """`doc_kind` ∈ {'quotation', 'invoice'}. Returns PDF bytes."""
+    """`doc_kind` ∈ {'quotation','invoice','delivery_challan','purchase_order'}. Returns PDF bytes."""
     buf = BytesIO()
     width, height = A4
     margin = 14 * mm
@@ -142,11 +150,23 @@ def render_billing_doc(doc_kind: str, doc: dict, company: dict) -> bytes:
     pdf.addPageTemplates([template])
     s = _styles()
 
-    head_title = "QUOTATION" if doc_kind == "quotation" else "TAX INVOICE"
-    company_block = _addr_block(company)
-    bill_to = _addr_block({**(doc.get("buyer") or {}), "name": (doc.get("buyer") or {}).get("name")})
-    ship_to_party = doc.get("ship_to") or doc.get("buyer") or {}
-    ship_to = _addr_block(ship_to_party)
+    head_title = DOC_TITLES.get(doc_kind, doc_kind.upper())
+    # PO is "outbound from us TO vendor" — relabel the 3 columns for clarity.
+    if doc_kind == "purchase_order":
+        company_block = _addr_block(company)
+        bill_to = _addr_block(doc.get("vendor") or {})    # Vendor block
+        ship_to = _addr_block(doc.get("buyer") or company)  # Ship-to = our address
+        from_label = "Buyer (Us)"
+        bill_label = "Vendor / Supplier"
+        ship_label = "Deliver To"
+    else:
+        company_block = _addr_block(company)
+        bill_to = _addr_block({**(doc.get("buyer") or {}), "name": (doc.get("buyer") or {}).get("name")})
+        ship_to_party = doc.get("ship_to") or doc.get("buyer") or {}
+        ship_to = _addr_block(ship_to_party)
+        from_label = "From / Seller"
+        bill_label = "Bill To"
+        ship_label = "Ship To"
 
     meta_rows = [
         ["Document No.", doc.get("number", "—")],
@@ -164,6 +184,17 @@ def render_billing_doc(doc_kind: str, doc: dict, company: dict) -> bytes:
             meta_rows.append(["Vehicle No.", doc["vehicle_no"]])
         if doc.get("eway_bill_no"):
             meta_rows.append(["e-Way Bill", doc["eway_bill_no"]])
+    if doc_kind == "delivery_challan":
+        meta_rows.append(["Purpose", (doc.get("purpose") or "sale").replace("_", " ").title()])
+        if doc.get("vehicle_no"):
+            meta_rows.append(["Vehicle No.", doc["vehicle_no"]])
+        if doc.get("driver_name"):
+            meta_rows.append(["Driver", doc["driver_name"]])
+        if doc.get("transporter_name"):
+            meta_rows.append(["Transporter", doc["transporter_name"]])
+    if doc_kind == "purchase_order":
+        if doc.get("expected_delivery"):
+            meta_rows.append(["Expected", _fmt_date(doc.get("expected_delivery"))])
     meta_table = Table(meta_rows, colWidths=[28 * mm, 50 * mm])
     meta_table.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 8),
@@ -174,9 +205,9 @@ def render_billing_doc(doc_kind: str, doc: dict, company: dict) -> bytes:
     ]))
 
     party_rows = [
-        [Paragraph("<b>From / Seller</b>", s["label"]),
-         Paragraph("<b>Bill To</b>", s["label"]),
-         Paragraph("<b>Ship To</b>", s["label"])],
+        [Paragraph(f"<b>{from_label}</b>", s["label"]),
+         Paragraph(f"<b>{bill_label}</b>", s["label"]),
+         Paragraph(f"<b>{ship_label}</b>", s["label"])],
         [Paragraph(company_block, s["body"]),
          Paragraph(bill_to, s["body"]),
          Paragraph(ship_to, s["body"])],
@@ -273,3 +304,88 @@ def _fmt_date(s: str | None) -> str:
         return d.strftime("%d %b %Y")
     except Exception:
         return s
+
+
+def render_gate_pass(g: dict, company: dict) -> bytes:
+    """Single-page Gate Pass — security-guard friendly. Big number, vehicle,
+    items-summary, signature blocks at bottom for Issuer/Security/Recipient."""
+    buf = BytesIO()
+    width, height = A4
+    margin = 14 * mm
+    template = PageTemplate(
+        id="gp", frames=[Frame(margin, margin, width - 2 * margin, height - 2 * margin, showBoundary=0)]
+    )
+    pdf = BaseDocTemplate(buf, pagesize=A4, leftMargin=margin, rightMargin=margin,
+                          topMargin=margin, bottomMargin=margin, title=g.get("number", "GatePass"))
+    pdf.addPageTemplates([template])
+    s = _styles()
+
+    direction = (g.get("direction") or "outward").upper()
+    title = Paragraph(f"GATE PASS — {direction}", s["title"])
+    sub = Paragraph(f"<font color='#6B7280'>{company.get('legal_name','')}</font>", s["small"])
+
+    meta_rows = [
+        ["Gate Pass No.", g.get("number", "—")],
+        ["Date", _fmt_date(g.get("date"))],
+        ["Direction", direction.title()],
+    ]
+    if g.get("ref_number"):
+        meta_rows.append([f"Ref ({(g.get('ref_type') or '').replace('_',' ').title()})", g["ref_number"]])
+    meta_table = Table(meta_rows, colWidths=[40 * mm, 50 * mm])
+    meta_table.setStyle(TableStyle([
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("TEXTCOLOR", (0, 0), (0, -1), MUTED),
+        ("FONTNAME", (1, 0), (1, -1), "Helvetica-Bold"),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+    ]))
+
+    party_rows = [
+        ["Party", g.get("party_name") or "—"],
+        ["Vehicle No.", g.get("vehicle_no") or "—"],
+        ["Driver", g.get("driver_name") or "—"],
+        ["Driver Phone", g.get("driver_phone") or "—"],
+    ]
+    party_table = Table(party_rows, colWidths=[40 * mm, 130 * mm])
+    party_table.setStyle(TableStyle([
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("TEXTCOLOR", (0, 0), (0, -1), MUTED),
+        ("FONTNAME", (1, 0), (1, -1), "Helvetica-Bold"),
+        ("BOX", (0, 0), (-1, -1), 0.4, colors.HexColor("#D1D5DB")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#D1D5DB")),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+    ]))
+
+    items_block = Paragraph(
+        f"<b>Goods / Items being moved:</b><br/>{g.get('items_summary') or '— see attached invoice / DC —'}",
+        s["body"],
+    )
+
+    sigs = Table(
+        [[
+            Paragraph("<b>Issued By</b><br/><br/><br/>_________________<br/><font color='#6B7280' size=8>(Signature & Date)</font>", s["small"]),
+            Paragraph("<b>Security / Gate</b><br/><br/><br/>_________________<br/><font color='#6B7280' size=8>(Stamp on exit)</font>", s["small"]),
+            Paragraph("<b>Receiver / Driver</b><br/><br/><br/>_________________<br/><font color='#6B7280' size=8>(Acknowledged)</font>", s["small"]),
+        ]],
+        colWidths=[60 * mm, 60 * mm, 60 * mm],
+    )
+    sigs.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("BOX", (0, 0), (-1, -1), 0.3, colors.HexColor("#D1D5DB")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#D1D5DB")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+    ]))
+
+    notes_para = Paragraph(f"<b>Notes</b>: {g['notes']}", s["small"]) if g.get("notes") else None
+
+    story = [title, sub, Spacer(1, 8), meta_table, Spacer(1, 12), party_table, Spacer(1, 12),
+             items_block, Spacer(1, 24), sigs]
+    if notes_para:
+        story.extend([Spacer(1, 10), notes_para])
+    pdf.build(story)
+    buf.seek(0)
+    return buf.read()

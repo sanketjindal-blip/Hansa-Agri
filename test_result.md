@@ -526,7 +526,66 @@ backend:
           4) GET /api/admin/leads confirms retest lead has status='purchased'.
           No 5xx. Fix verified.
 
-  - task: "Billing Phase 1+2 (Company/Customers/Quotations/Invoices)"
+  - task: "Billing Phase 3+4+5(stub)+7 — DC, Gate Pass, Vendors, PO, Reports, e-Way Bill stub"
+    implemented: true
+    working: true
+    file: "backend/routes/billing_extended.py + backend/services/pdfgen.py + backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          Full regression of Phase 3+4+5(stub)+7 via /app/backend_test_billing_ext.py — **68/68 PASS, zero 5xx**.
+
+          A) VENDORS (9/9): GET /vendors 200; POST {Acme Steels, 27ABCDE1234F1Z5, state_code=27, phone 9988776655} → 200 with state_code=27 AND pan=ABCDE1234F auto-derived from GSTIN; POST invalid "BADGSTIN" → 400 "Invalid GSTIN format"; PATCH phone=9000000000 → 200 updated; GET list contains vendor; DELETE → 200 {ok:true}.
+
+          B) DELIVERY CHALLANS (10/10): Chose/created a UP customer (state_code=09) for intra-state validation. POST DC (Tiller TMX-50 qty 2 @48500, gst 5%, apply_gst=true, vehicle UP14AB1234, driver Ramesh) → 200 with number=HANSA/2026-27/DC/0001, totals.intra_state=true, cgst=sgst=2425 (5% split 50/50), grand_total=101850. POST DC apply_gst=false (job-work) → cgst=sgst=igst=0 and grand_total=97000 = qty*rate. GET list contains both. GET /delivery-challans/{id}/pdf → 200 application/pdf, body starts %PDF-1.4, 3432 bytes. DELETE → 200.
+
+          C) GATE PASSES (9/9): POST {ref_type=delivery_challan, ref_id=DC_id, direction=outward} → 200 number HANSA/2026-27/GP/0001; party_name auto-pulled from DC.buyer.name; items_summary auto-populated as "Tiller TMX-50 x2.0"; vehicle_no UP14AB1234 inherited from DC. POST manual {ref_type=manual, party_name=Test Co, items_summary=5 cartons, vehicle_no=UP14XY1234} → 200 fields persisted. GET list contains both. GET /gate-passes/{id}/pdf → 200 application/pdf %PDF- 2495 bytes.
+
+          D) PURCHASE ORDERS (7/7): Recreated vendor (MH 27), POST PO {MS Plate qty 100 @80, gst 18%, expected_delivery 2026-06-15} → 200 number HANSA/2026-27/PO/0001. Since supplier state=27 (MH) ≠ buyer state=09 (UP), totals.intra_state=false and IGST=1440, CGST=SGST=0 ✓. GET list contains PO. GET /purchase-orders/{id}/pdf → 200 application/pdf %PDF- 3392 bytes.
+
+          E) e-WAY BILL stub (5/5): POST /invoices/{iid}/eway-bill {171234567890, 2026-05-03, UP14AB1234, Road} → 200 with invoice.eway_bill_no set and eway_bill_status="manual". POST /invoices/{iid}/generate-eway → 503 with detail "e-Way Bill GSP not configured. Provide credentials in backend/.env..." ✓. POST /invoices/non-existent-id/eway-bill → 404.
+
+          F) REPORTS (13/13): /reports/sales-register 200 with rows[] + totals{count,taxable,cgst,sgst,igst,grand_total}. Date-range 1900-01-01..02 → empty rows, all totals zero. /reports/customer-ledger?customer_id=<valid> 200 with customer object, entries[] sorted by date ascending, summary{invoices_count,quotations_count,delivery_challans_count,total_invoiced}. /customer-ledger?customer_id=invalid-id → 404 "Customer not found". /reports/aging 200 with rows[], buckets {0-30,31-60,61-90,90+}, total_outstanding numeric (135150.0). /reports/gstr1?period=052026 → 200 with summary{period:"052026", invoices_count:2, b2b_count:2, ...} and json{gstin:"09AAOCR7303L1ZU", fp:"052026", b2b[], b2cl[], b2cs[], hsn:{data:[]}} — full GSTN offline-tool shape validated. /reports/gstr1 no-period → 200, defaults to current month (052026) ✓.
+
+          G) AUTH GATING (11/11): All 7 representative endpoints (vendors, DCs, gate-passes, POs, reports sales-register/aging/gstr1) with no token → 401. Customer token (ramesh@farm.com legacy) → 403 on vendors, delivery-challans, purchase-orders, reports/sales-register.
+
+          No 5xx observed anywhere in the run. The feature is fully operational. Note: PDF generation is working correctly for all new doc kinds (DC, GP, PO) — reportlab layout fix from prior iteration covers these too.
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Built Phase 3+4+5(stub)+7 routes under /api/admin/billing/*:
+          • Vendors:    GET/POST/PATCH/DELETE /vendors  (GSTIN-aware, similar to customers)
+          • DC:         GET/POST/DELETE /delivery-challans  + GET /delivery-challans/{id}/pdf
+                        Body: customer_id, items[], purpose (sale|job-work|sample|approval|return),
+                        apply_gst toggle, vehicle/driver fields, optional invoice_id link.
+                        Numbering HANSA/<FY>/DC/0001.
+          • Gate Pass:  GET/POST/DELETE /gate-passes  + GET /gate-passes/{id}/pdf
+                        ref_type ∈ {invoice|delivery_challan|manual}; auto-pulls party_name +
+                        items_summary from referenced doc. Numbering HANSA/<FY>/GP/0001.
+          • PO:         GET/POST/DELETE /purchase-orders  + GET /purchase-orders/{id}/pdf
+                        GST-aware (vendor state vs our state) — IGST when inter-state,
+                        CGST+SGST when intra-state. Numbering HANSA/<FY>/PO/0001.
+          • e-Way Bill: POST /invoices/{id}/eway-bill  (manual entry persisted)
+                        POST /invoices/{id}/generate-eway → 503 with friendly stub message
+                        ("provide GSP creds in backend/.env"). Wire-up pending user creds.
+          • Reports:
+              GET /reports/sales-register?date_from&date_to → rows + totals
+              GET /reports/customer-ledger?customer_id     → entries + summary
+              GET /reports/aging                            → buckets 0-30/31-60/61-90/90+
+              GET /reports/gstr1?period=MMYYYY              → {summary, json:{b2b,b2cl,b2cs,hsn}}
+                                                              (gov-spec JSON for offline tool)
+
+          PDF gen extended: render_billing_doc supports new doc_kinds 'delivery_challan' and
+          'purchase_order' (PO swaps party labels: From=Us, Vendor block, Deliver-To=Us).
+          New render_gate_pass() generates a single-page security-friendly Gate Pass with
+          big direction header + party/vehicle/driver block + items-summary + 3 signature
+          blocks (Issued/Security/Receiver).
+
+          Wired billing_extended router into backend/server.py.
     implemented: true
     working: true
     file: "backend/routes/billing.py + backend/services/gst.py + backend/services/pdfgen.py"
@@ -988,3 +1047,45 @@ frontend:
       3) GET /api/admin/billing/quotations → 200 (4 quotations listed). ✅
       4) GET /api/admin/billing/invoices → 200 (2 invoices listed). ✅
       The previous reportlab `negative availWidth=-12` ValueError is fully resolved (header_row uses colWidths=[110mm,72mm] with title_cell wrapper instead of the broken [180mm,0]). Both PDFs render header + meta + party-block + items-table + totals + signature. Billing feature cleared; no further retest required.
+
+  - agent: "testing"
+    message: |
+      HANSA Billing Phase 3+4+5(stub)+7 regression via /app/backend_test_billing_ext.py
+      against the public preview URL — **68 PASS / 0 FAIL, zero 5xx**.
+
+      A) Vendors (9/9): CRUD fully working. POST with GSTIN 27ABCDE1234F1Z5
+         auto-derived pan=ABCDE1234F and state_code=27. Invalid "BADGSTIN"
+         → 400. PATCH phone, GET list contains, DELETE → {ok:true}.
+      B) Delivery Challans (10/10): POST with apply_gst=true (UP→UP) → 200,
+         number HANSA/2026-27/DC/0001, intra_state=true, cgst=sgst=2425,
+         grand_total=101850. POST apply_gst=false (job-work) → cgst=sgst=
+         igst=0, grand_total=qty*rate=97000. GET list, PDF (3432 bytes,
+         %PDF-1.4), DELETE all PASS.
+      C) Gate Passes (9/9): ref_type=delivery_challan auto-pulls party_name
+         ("Ramesh Singh Farms") from DC.buyer, items_summary ("Tiller
+         TMX-50 x2.0"), vehicle_no (UP14AB1234). Manual GP persists
+         explicit fields. PDF application/pdf %PDF- (2495 bytes).
+      D) Purchase Orders (7/7): POST with Maharashtra vendor (state 27) +
+         our state 09 → intra_state=false, IGST=1440, CGST=SGST=0.
+         Number HANSA/2026-27/PO/0001. PDF 3392 bytes.
+      E) e-Way Bill stub (5/5): POST /invoices/{iid}/eway-bill → 200 with
+         eway_bill_no persisted and eway_bill_status="manual". POST
+         /invoices/{iid}/generate-eway → 503 "e-Way Bill GSP not
+         configured. Provide credentials in backend/.env (EWAY_GSP_PROVIDER,
+         EWAY_USERNAME, EWAY_PASSWORD, EWAY_CLIENT_ID, EWAY_CLIENT_SECRET)".
+         Non-existent invoice id → 404.
+      F) Reports (13/13): sales-register 200 with rows[] + totals{count,
+         taxable, cgst, sgst, igst, grand_total}. Empty date window 1900
+         returns zeroed totals. customer-ledger(valid) 200 with customer,
+         entries sorted by date, summary{invoices/quotations/dc counts,
+         total_invoiced}. customer-ledger(invalid) → 404 "Customer not
+         found". aging 200 with rows[], buckets {0-30,31-60,61-90,90+},
+         numeric total_outstanding. gstr1?period=052026 → 200 with
+         summary{period:"052026", invoices_count:2, b2b_count:2, ...} and
+         json{gstin:"09AAOCR7303L1ZU", fp:"052026", b2b[], b2cl[], b2cs[],
+         hsn:{data:[]}} — full GSTN offline-tool shape. gstr1 no-period
+         defaults to current month (052026) correctly.
+      G) Auth gating (11/11): no-token → 401 on 7 representative endpoints.
+         Customer token → 403 on vendors, DCs, POs, reports/sales-register.
+
+      Feature cleared. No 5xx in backend logs. No further retest required.

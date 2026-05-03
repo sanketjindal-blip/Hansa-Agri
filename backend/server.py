@@ -29,6 +29,7 @@ from routes import (
     manager as manager_routes,
     notifications as notifications_routes,
     billing as billing_routes,
+    billing_extended as billing_extended_routes,
 )
 from services import seed as seed_service
 
@@ -51,6 +52,7 @@ api.include_router(service_routes.router)
 api.include_router(manager_routes.router)
 api.include_router(notifications_routes.router)
 api.include_router(billing_routes.router)
+api.include_router(billing_extended_routes.router)
 
 
 @api.get("/")
