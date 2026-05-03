@@ -41,6 +41,7 @@ export default function Profile() {
       { icon: 'construct-outline', label: t('admin_dashboard'), onPress: () => router.push('/admin') },
       { icon: 'cube-outline', label: 'Manage Products', onPress: () => router.push('/admin-products') },
       { icon: 'bar-chart-outline', label: 'Inventory Dashboard', onPress: () => router.push('/admin-inventory') },
+      { icon: 'receipt-outline', label: 'Billing — Quotations & Tax Invoices', onPress: () => router.push('/admin-billing') },
       { icon: 'apps-outline', label: 'Manage Categories', onPress: () => router.push('/admin-categories') },
       { icon: 'people-outline', label: 'Leads & Points', onPress: () => router.push('/admin-leads') },
       { icon: 'build-outline', label: 'Service Requests', onPress: () => router.push('/admin-service-requests') },
