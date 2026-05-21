@@ -10,20 +10,21 @@
     "start": "vite preview --host 0.0.0.0 --port 3000"
   },
   "devDependencies": {
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
+    "@types/react": "~19.1.10",
+    "@types/react-dom": "~19.1.7",
     "@vitejs/plugin-react": "^6.0.1",
     "autoprefixer": "^10.5.0",
     "esbuild": "^0.28.0",
     "postcss": "^8.5.13",
     "serve": "^14.2.6",
     "tailwindcss": "^3.4.19",
-    "typescript": "~6.0.2",
+    "typescript": "~5.9.2",
     "vite": "^8.0.10"
   },
   "dependencies": {
     "@types/node": "^25.6.0",
     "axios": "^1.16.0",
+    "expo": "~54.0.34",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-router-dom": "^7.14.2"
